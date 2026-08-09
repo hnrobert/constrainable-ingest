@@ -1,0 +1,58 @@
+# Single-machine intranet deployment: app + SRS, no reverse proxy, no TLS.
+# Browser reaches both services on the host IP + published ports.
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: constrainable-ingest:latest
+    container_name: ingest-app
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      NODE_ENV: production
+      TZ: ${TZ:-Asia/Shanghai}
+      # storage
+      DB_PATH: /app/data/app.db
+      RECORD_DIR: /app/records
+      # SRS endpoints (server-to-server via compose service name)
+      SRS_API_BASE: http://srs:1985/api/v1
+      SRS_RTMP_HOST: srs
+      # browser-visible host (LAN/public IP) for playback URLs
+      PUBLIC_HOST: ${PUBLIC_HOST:-127.0.0.1}
+      # binaries (installed in the image)
+      FFMPEG_PATH: ffmpeg
+      FFPROBE_PATH: ffprobe
+      # auth
+      SESSION_SECRET: ${SESSION_SECRET:-changeme-change-me}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # socket.io fallback port
+      SOCKET_PORT: "3001"
+    volumes:
+      - ../data:/app/data
+      - ../records:/app/records
+    ports:
+      - "3000:3000"
+      - "3001:3001"   # Socket.IO (standalone, same port in dev + prod)
+    depends_on:
+      - srs
+    restart: unless-stopped
+
+  srs:
+    image: ossrs/srs:7
+    container_name: ingest-srs
+    entrypoint: ["/bin/sh", "/srs-entrypoint.sh"]
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      # browser-reachable IP for WebRTC ICE candidate (the host's LAN/public IP)
+      SRS_RTC_CANDIDATE: ${PUBLIC_HOST:-127.0.0.1}
+    volumes:
+      - ./srs.conf:/srs.conf.template:ro
+      - ./srs-entrypoint.sh:/srs-entrypoint.sh:ro
+    ports:
+      - "1935:1935"   # RTMP ingest (OBS)
+      - "1985:1985"   # HTTP API + WHEP
+      - "8080:8080"   # HTTP-FLV / HLS playback
+      - "8000:8000/udp" # WebRTC (optional)
+    restart: unless-stopped
