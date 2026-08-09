@@ -15,6 +15,12 @@ interface ViewerEvent {
 }
 
 const toast = useToast()
+const { user, fetchSession } = useAuth()
+// Hydrate the session so a logged-in account (admin/viewer) bypasses the
+// passphrase gate; anonymous guests still need per-event passphrases.
+await callOnce('viewer:session', () => fetchSession())
+const authed = computed(() => !!user.value)
+
 const { data: events, refresh } = await useFetch<ViewerEvent[]>('/api/viewer/events')
 
 // passphrase gate state, keyed by event id
@@ -77,15 +83,15 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
         </div>
       </div>
 
-      <!-- public: go straight in -->
-      <div v-if="e.viewerAccess === 'public'" class="row">
+      <!-- public OR authenticated: go straight in -->
+      <div v-if="e.viewerAccess === 'public' || authed" class="row">
         <NuxtLink v-if="e.status === 'live' && e.liveStreams.length" :to="`/viewer/${e.id}`">
           <button class="primary">进入观看</button>
         </NuxtLink>
         <span v-else class="muted">尚未开始</span>
       </div>
 
-      <!-- passphrase gate -->
+      <!-- passphrase gate (anonymous guests only) -->
       <div v-else class="gate">
         <input
           :placeholder="`输入 ${e.name} 的观看口令`"

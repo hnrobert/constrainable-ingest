@@ -1,6 +1,7 @@
 /** Return absolute FLV + WHEP playback URLs for a stream, after access check. */
 import { createError } from 'h3'
 import { resolveStreamUrls, readViewerUnlocks } from '../../services/viewer'
+import { getAuth } from '../../utils/auth'
 
 export default defineEventHandler(async (event) => {
   const q = getQuery(event)
@@ -10,6 +11,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'eventId and streamName are required' })
   }
 
+  // Any logged-in account (admin or viewer) bypasses the passphrase gate.
+  const authenticated = !!getAuth(event)
   const unlocked = await readViewerUnlocks(event)
-  return resolveStreamUrls(eventId, streamName, unlocked)
+  return resolveStreamUrls(eventId, streamName, unlocked, authenticated)
 })

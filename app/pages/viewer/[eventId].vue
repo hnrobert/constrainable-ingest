@@ -16,6 +16,9 @@ interface ViewerEvent {
 const route = useRoute()
 const eventId = Number(route.params.eventId)
 const toast = useToast()
+const { user, fetchSession } = useAuth()
+await callOnce('viewer:session', () => fetchSession())
+const authed = computed(() => !!user.value)
 
 const { data: ev, refresh } = await useFetch<ViewerEvent[]>(`/api/viewer/events`)
 const event = computed(() => (ev.value ?? []).find((e) => e.id === eventId) ?? null)
@@ -37,7 +40,7 @@ watch(
   () => event.value,
   (e) => {
     if (!e) return
-    if (e.viewerAccess === 'passphrase' && selected.value === null) {
+    if (e.viewerAccess === 'passphrase' && selected.value === null && !authed.value) {
       // the stream-url endpoint will 403 if not unlocked; surface a hint
       toast.info('如需播放请先在列表页输入口令')
     }

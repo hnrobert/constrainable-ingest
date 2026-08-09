@@ -1,9 +1,13 @@
 /**
- * Public-facing viewer catalog + playback URL builder (business logic). Viewers
- * are unauthenticated; passphrase-protected events require a per-event unlock
- * (signed `viewer` cookie, see session.ts). Playback URLs point the browser
- * straight at SRS (no proxy) using the browser-visible public host. DB access
- * goes through the repositories.
+ * Public-facing viewer catalog + playback URL builder (business logic). Two
+ * kinds of viewer reach these endpoints (both auto-allowlisted by 01-auth):
+ *   - anonymous guests: passphrase-protected events require a per-event unlock
+ *     (signed `viewer` cookie, see session.ts);
+ *   - logged-in accounts (admin OR viewer role): an authenticated session
+ *     bypasses the passphrase gate entirely, so registered viewers watch
+ *     without a per-event passphrase.
+ * Playback URLs point the browser straight at SRS (no proxy) using the
+ * browser-visible public host. DB access goes through the repositories.
  */
 import { createError, getCookie, type H3Event } from 'h3'
 import { EventsRepository } from '../repositories/events.repository'
@@ -66,7 +70,9 @@ export async function viewerUnlockedEvents(cookieValue?: string): Promise<Set<nu
 export function viewerCanAccess(
   event: Pick<Event, 'id' | 'viewerAccess'>,
   unlocked: Set<number>,
+  authenticated = false,
 ): boolean {
+  if (authenticated) return true
   if (event.viewerAccess === 'public') return true
   return unlocked.has(event.id)
 }
@@ -86,17 +92,20 @@ export async function verifyEventPassphrase(eventId: number, passphrase: string)
 
 /**
  * Resolve a viewer access request for the access endpoint. Public events need
- * no passphrase; passphrase events must verify. Returns the access mode; the
- * caller (handler) is responsible for setting the unlock cookie. Throws on any
- * failure (400/403/404).
+ * no passphrase; passphrase events must verify — UNLESS the caller is an
+ * authenticated account (`authenticated`), which bypasses the passphrase.
+ * Returns the access mode; the caller (handler) is responsible for setting the
+ * unlock cookie for anonymous guests. Throws on any failure (400/403/404).
  */
 export async function requestViewerAccess(
   eventId: number,
   passphrase: string,
+  authenticated = false,
 ): Promise<{ viewerAccess: Event['viewerAccess'] }> {
   const e = EventsRepository.findById(eventId)
   if (!e) throw createError({ statusCode: 404, statusMessage: 'event not found' })
   if (e.viewerAccess === 'public') return { viewerAccess: 'public' }
+  if (authenticated) return { viewerAccess: 'passphrase' }
   if (!passphrase) throw createError({ statusCode: 400, statusMessage: '口令不能为空' })
   await verifyEventPassphrase(eventId, passphrase)
   return { viewerAccess: 'passphrase' }
@@ -125,17 +134,19 @@ export function buildStreamUrls(eventName: string, streamName: string): StreamUr
 
 /**
  * Resolve playback URLs for the stream-url endpoint: loads the event, enforces
- * the viewer-access gate, then builds the FLV/WHEP URLs. Throws 403 if the
- * viewer hasn't unlocked a passphrase event.
+ * the viewer-access gate, then builds the FLV/WHEP URLs. An authenticated
+ * account bypasses the passphrase gate; an anonymous guest must have unlocked
+ * the event. Throws 403 otherwise.
  */
 export function resolveStreamUrls(
   eventId: number,
   streamName: string,
   unlocked: Set<number>,
+  authenticated = false,
 ): StreamUrls {
   const e = EventsRepository.findById(eventId)
   if (!e) throw createError({ statusCode: 404, statusMessage: 'event not found' })
-  if (!viewerCanAccess(e, unlocked)) {
+  if (!viewerCanAccess(e, unlocked, authenticated)) {
     throw createError({ statusCode: 403, statusMessage: '需要口令' })
   }
   return buildStreamUrls(e.name, streamName)

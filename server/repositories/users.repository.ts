@@ -1,10 +1,12 @@
 /**
- * users table — data access only. Auth/session reads. (kaleidodanmu-style
- * repository: pure Drizzle queries, no business logic, no HTTP errors.)
+ * users table — data access only. Auth/session reads + registration writes.
+ * (kaleidodanmu-style repository: pure Drizzle queries, no business logic, no
+ * HTTP errors.) `isEmpty()` drives the first-registrant-is-super-admin rule
+ * (services/auth handler, not here).
  */
-import { eq } from 'drizzle-orm'
+import { count, eq } from 'drizzle-orm'
 import { db } from '../database/db'
-import { users, type User } from '../database/schema'
+import { users, type NewUser, type User } from '../database/schema'
 
 export const UsersRepository = {
   findById(id: number): User | undefined {
@@ -12,5 +14,17 @@ export const UsersRepository = {
   },
   findByUsername(username: string): User | undefined {
     return db.select().from(users).where(eq(users.username, username)).get()
+  },
+  count(): number {
+    const row = db.select({ n: count() }).from(users).get()
+    return row?.n ?? 0
+  },
+  /** True when no users exist yet → the next registrant becomes super admin. */
+  isEmpty(): boolean {
+    const row = db.select({ n: count() }).from(users).get()
+    return (row?.n ?? 0) === 0
+  },
+  insert(values: NewUser): User {
+    return db.insert(users).values(values).returning().get()
   },
 }

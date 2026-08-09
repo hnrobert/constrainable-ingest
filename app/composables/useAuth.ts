@@ -45,6 +45,17 @@ export function useAuth() {
     return u
   }
 
+  /** Open registration: first user becomes admin, the rest are viewers. */
+  async function register(username: string, password: string): Promise<SessionUser> {
+    const u = await $fetch<SessionUser>('/api/auth/register', {
+      method: 'POST',
+      body: { username, password },
+    })
+    user.value = u
+    probed.value = true
+    return u
+  }
+
   async function logout(): Promise<void> {
     try {
       await $fetch('/api/auth/logout', { method: 'POST' })
@@ -54,5 +65,5 @@ export function useAuth() {
     }
   }
 
-  return { user, probed, isAuthenticated, isAdmin, fetchSession, login, logout }
+  return { user, probed, isAuthenticated, isAdmin, fetchSession, login, register, logout }
 }
