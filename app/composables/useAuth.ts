@@ -2,11 +2,20 @@
  * Auth state shared across the app. The server middleware is the real gate;
  * this composable drives UX (header user/logout, client-side redirect on
  * expired sessions).
+ *
+ * Email is the login identifier. Registration is two-step: send-code emails a
+ * 6-digit code keyed by a client-chosen `session` token, then register consumes
+ * it. The first registration (bootstrap) needs no code.
  */
 export interface SessionUser {
   id: number
-  username: string
+  email: string
   role: 'admin' | 'viewer'
+}
+
+export interface BootstrapStatus {
+  /** true when no users exist yet → next registrant becomes super admin, no code needed. */
+  bootstrap: boolean
 }
 
 export function useAuth() {
@@ -35,25 +44,49 @@ export function useAuth() {
     }
   }
 
-  async function login(username: string, password: string): Promise<SessionUser> {
+  async function login(email: string, password: string): Promise<SessionUser> {
     const u = await $fetch<SessionUser>('/api/auth/login', {
       method: 'POST',
-      body: { username, password },
+      body: { email, password },
     })
     user.value = u
     probed.value = true
     return u
   }
 
-  /** Open registration: first user becomes admin, the rest are viewers. */
-  async function register(username: string, password: string): Promise<SessionUser> {
+  /** Step 1: email a verification code. `session` is a client flow token. */
+  async function sendCode(email: string, session: string): Promise<{ ok: boolean; bootstrap?: boolean }> {
+    return await $fetch<{ ok: boolean; bootstrap?: boolean }>('/api/auth/send-code', {
+      method: 'POST',
+      body: { email, session },
+    })
+  }
+
+  /**
+   * Step 2 (or bootstrap): create the account. In bootstrap mode (first user)
+   * `code`/`session` are ignored by the server. On success the caller is logged
+   * in immediately.
+   */
+  async function register(email: string, password: string, code: string, session: string): Promise<SessionUser> {
     const u = await $fetch<SessionUser>('/api/auth/register', {
       method: 'POST',
-      body: { username, password },
+      body: { email, password, code, session },
     })
     user.value = u
     probed.value = true
     return u
+  }
+
+  /** Whether the system is still in bootstrap (first registrant = super admin). */
+  async function fetchBootstrap(): Promise<boolean> {
+    try {
+      // URL widened to `string` to bypass Nuxt's typed-route union (the literal
+      // form trips TS's recursion limit once the route registry grows).
+      const r = await $fetch<BootstrapStatus>('/api/auth/bootstrap' as string)
+      return r.bootstrap
+    } catch {
+      return false
+    }
   }
 
   async function logout(): Promise<void> {
@@ -65,5 +98,16 @@ export function useAuth() {
     }
   }
 
-  return { user, probed, isAuthenticated, isAdmin, fetchSession, login, register, logout }
+  return {
+    user,
+    probed,
+    isAuthenticated,
+    isAdmin,
+    fetchSession,
+    login,
+    sendCode,
+    register,
+    fetchBootstrap,
+    logout,
+  }
 }

@@ -6,5 +6,5 @@ export default defineEventHandler((event) => {
   if (!auth) return null
   const user = UsersRepository.findById(auth.userId)
   if (!user) return null
-  return { id: user.id, username: user.username, role: user.role }
+  return { id: user.id, email: user.email, role: user.role }
 })

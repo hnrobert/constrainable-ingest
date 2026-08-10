@@ -54,6 +54,26 @@ const concurrencySchema = z.object({
   probeMax: z.number().int().min(1).default(8),
 })
 
+/**
+ * Registration email restrictions (mirrors unnc-freshmen-verifier-gateway).
+ *   - emailWhitelist: when enabled, a registration email must match at least one
+ *     picomatch glob (e.g. `*@nottingham.edu.cn`). Empty patterns + enabled =
+ *     no-op (allow all), so an admin can't lock the app out. The very first
+ *     registration (super-admin bootstrap) ALWAYS bypasses this.
+ *   - disallowedPatterns: substrings (case-insensitive) that are never accepted
+ *     — institutional mailing-list accounts like `student` / `staff`. Default
+ *     mirrors the gateway; editable to suit your org.
+ */
+const emailWhitelistSchema = z.object({
+  enabled: z.boolean().default(false),
+  patterns: z.array(z.string()).default([]),
+})
+
+const registrationSchema = z.object({
+  emailWhitelist: emailWhitelistSchema.default(emailWhitelistSchema.parse({})),
+  disallowedPatterns: z.array(z.string()).default(['student', 'staff']),
+})
+
 export const appConfigSchema = z.object({
   srs: srsSchema.default(srsSchema.parse({})),
   probe: probeSchema.default(probeSchema.parse({})),
@@ -63,10 +83,12 @@ export const appConfigSchema = z.object({
   record: recordSchema.default(recordSchema.parse({})),
   access: accessSchema.default(accessSchema.parse({})),
   concurrency: concurrencySchema.default(concurrencySchema.parse({})),
+  registration: registrationSchema.default(registrationSchema.parse({})),
 })
 
 export type AppConfig = z.infer<typeof appConfigSchema>
 export type Limits = z.infer<typeof limitsSchema>
+export type Registration = z.infer<typeof registrationSchema>
 
 /** Per-event limits override (all optional; null/undefined = inherit global). */
 export const limitsOverrideSchema = z.object({

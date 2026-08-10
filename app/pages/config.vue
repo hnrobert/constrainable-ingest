@@ -99,6 +99,28 @@ function onInput(path: string, kind: Kind, raw: any): void {
   setPath(form.value, path, v)
 }
 
+// Registration email whitelist + disallowed patterns are string arrays — edited
+// as line-separated textareas, split/joined here. Empty whitelist + enabled is
+// treated as "allow all" server-side (can't lock the app out).
+const whitelistText = computed<string>({
+  get: () => form.value.registration.emailWhitelist.patterns.join('\n'),
+  set: (v) => {
+    form.value.registration.emailWhitelist.patterns = v
+      .split('\n')
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+  },
+})
+const disallowedText = computed<string>({
+  get: () => form.value.registration.disallowedPatterns.join('\n'),
+  set: (v) => {
+    form.value.registration.disallowedPatterns = v
+      .split('\n')
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+  },
+})
+
 const dirty = computed(() => JSON.stringify(form.value) !== JSON.stringify(data.value))
 
 async function save(): Promise<void> {
@@ -173,6 +195,29 @@ function reset(): void {
           </template>
         </div>
       </section>
+
+      <section class="card">
+        <h2>注册邮箱限制</h2>
+        <div class="fields">
+          <label class="field field-bool">
+            <input
+              type="checkbox"
+              v-model="form.registration.emailWhitelist.enabled"
+            />
+            <span>启用邮箱白名单 <small class="muted">— 开启后，仅匹配下列通配符的邮箱可注册；留空则允许全部</small></span>
+          </label>
+          <label class="field">
+            <span class="field-label">允许的邮箱通配符（每行一个）</span>
+            <textarea v-model="whitelistText" rows="4" placeholder="*@nottingham.edu.cn&#10;*@*.nottingham.edu.cn"></textarea>
+            <small class="muted field-hint">picomatch 通配符，例如 <code>*@nottingham.edu.cn</code>。首位管理员注册不受此限制。</small>
+          </label>
+          <label class="field">
+            <span class="field-label">禁用的邮箱特征（每行一个）</span>
+            <textarea v-model="disallowedText" rows="3" placeholder="student&#10;staff"></textarea>
+            <small class="muted field-hint">出现这些词（不区分大小写）的邮箱一律拒绝，如机构邮件组 <code>student</code> / <code>staff</code>。</small>
+          </label>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -190,4 +235,15 @@ function reset(): void {
 .field-hint { font-size: 0.75rem; }
 .field-bool { flex-direction: row; align-items: center; gap: 0.5rem; }
 .field-bool input { width: auto; }
+textarea {
+  font: inherit;
+  resize: vertical;
+  min-height: 4lh;
+}
+code {
+  background: var(--border);
+  padding: 0 0.25rem;
+  border-radius: 3px;
+  font-size: 0.85em;
+}
 </style>

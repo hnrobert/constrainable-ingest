@@ -11,7 +11,7 @@ await callOnce('viewer:session', () => fetchSession())
       <NuxtLink to="/viewer" class="brand">Constrainable Ingest · 时间表</NuxtLink>
       <div class="auth">
         <template v-if="user">
-          <span class="user">{{ user.username }}</span>
+          <span class="user">{{ user.email }}</span>
           <button class="ghost" @click="logout">登出</button>
         </template>
         <NuxtLink v-else to="/login" class="login-link">登录</NuxtLink>

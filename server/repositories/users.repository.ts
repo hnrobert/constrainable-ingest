@@ -1,8 +1,9 @@
 /**
  * users table — data access only. Auth/session reads + registration writes.
  * (kaleidodanmu-style repository: pure Drizzle queries, no business logic, no
- * HTTP errors.) `isEmpty()` drives the first-registrant-is-super-admin rule
- * (services/auth handler, not here).
+ * HTTP errors.) Email is the unique login identifier. `isEmpty()` drives the
+ * first-registrant-is-super-admin rule (and the bootstrap code-verification
+ * exemption) in the auth handlers, not here.
  */
 import { count, eq } from 'drizzle-orm'
 import { db } from '../database/db'
@@ -12,8 +13,9 @@ export const UsersRepository = {
   findById(id: number): User | undefined {
     return db.select().from(users).where(eq(users.id, id)).get()
   },
-  findByUsername(username: string): User | undefined {
-    return db.select().from(users).where(eq(users.username, username)).get()
+  /** Email is normalized (trimmed + lowercased) before lookup. */
+  findByEmail(email: string): User | undefined {
+    return db.select().from(users).where(eq(users.email, email)).get()
   },
   count(): number {
     const row = db.select({ n: count() }).from(users).get()

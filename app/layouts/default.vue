@@ -10,6 +10,7 @@ const nav = [
   { label: '赛事', to: '/events' },
   { label: '录像', to: '/recordings' },
   { label: '配置', to: '/config' },
+  { label: '邮件', to: '/mail' },
   { label: '审计', to: '/audit', enabled: false },
 ]
 </script>
@@ -26,7 +27,7 @@ const nav = [
       </nav>
       <div class="app-auth">
         <NuxtLink to="/viewer" class="viewer-link" target="_blank">观看页</NuxtLink>
-        <span v-if="user" class="app-user">{{ user.username }}</span>
+        <span v-if="user" class="app-user">{{ user.email }}</span>
         <button v-if="user" class="ghost" @click="logout">登出</button>
       </div>
     </header>

@@ -10,9 +10,11 @@ import { sql } from 'drizzle-orm'
 const now = sql`(unixepoch())`
 
 /* ---------------------------------- users --------------------------------- */
+// Email is the login identifier + verified at registration via a 6-digit code
+// (see server/utils/email-code.ts). Mirrors unnc-freshmen-verifier-gateway.
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  username: text('username').notNull().unique(),
+  email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   role: text('role', { enum: ['admin', 'viewer'] }).notNull().default('admin'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(now),
