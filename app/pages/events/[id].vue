@@ -112,21 +112,48 @@ const freshKeys = ref<GeneratedKey[]>([])
 const genForm = reactive({ studentNumber: '', name: '', email: '', seatLabel: '', streamName: '' })
 
 // ---- per-event publish token ----
-const freshPublishToken = ref<{ token: string; preview: string } | null>(null)
+const freshPublishToken = ref<{ token: string; preview: string; isCustom: boolean } | null>(null)
 const rotatingToken = ref(false)
+const customToken = ref('')
+const TOKEN_RE = /^[A-Za-z0-9._~-]+$/
+const customTokenValid = computed(() => {
+  const t = customToken.value.trim()
+  return t.length >= 8 && t.length <= 128 && TOKEN_RE.test(t)
+})
 async function rotatePublishToken(): Promise<void> {
   if (event.value?.publishTokenPreview && !confirm('重新生成将使旧推流令牌立即失效，确定？')) return
   rotatingToken.value = true
   try {
-    const r = await $fetch<{ token: string; preview: string }>(`/api/events/${id}/publish-token`, {
-      method: 'POST',
-    })
+    const r = await $fetch<{ token: string; preview: string; isCustom: boolean }>(
+      `/api/events/${id}/publish-token`,
+      { method: 'POST' },
+    )
     freshPublishToken.value = r
     await refreshEvent()
     if (event.value) settings.value = structuredClone(toRaw(event.value))
     toast.success('推流令牌已生成（请立即复制，仅显示一次）')
   } catch (e: any) {
     toast.error('生成失败：' + (e?.data?.statusMessage || e?.message || ''))
+  } finally {
+    rotatingToken.value = false
+  }
+}
+async function setCustomPublishToken(): Promise<void> {
+  if (!customTokenValid.value) return
+  if (event.value?.publishTokenPreview && !confirm('设置自定义令牌将使旧推流令牌立即失效，确定？')) return
+  rotatingToken.value = true
+  try {
+    const r = await $fetch<{ token: string; preview: string; isCustom: boolean }>(
+      `/api/events/${id}/publish-token`,
+      { method: 'POST', body: { token: customToken.value.trim() } },
+    )
+    freshPublishToken.value = r
+    customToken.value = ''
+    await refreshEvent()
+    if (event.value) settings.value = structuredClone(toRaw(event.value))
+    toast.success('自定义推流令牌已设置')
+  } catch (e: any) {
+    toast.error('设置失败：' + (e?.data?.statusMessage || e?.message || ''))
   } finally {
     rotatingToken.value = false
   }
@@ -279,7 +306,7 @@ const statusOptions: { value: EventStatus; label: string }[] = [
       </p>
 
       <div v-if="freshPublishToken" class="fresh-token">
-        <strong>新令牌（仅显示一次，请立即复制）</strong>
+        <strong>{{ freshPublishToken.isCustom ? '已应用令牌' : '新令牌（仅显示一次，请立即复制）' }}</strong>
         <div class="kv"><span>令牌</span><code>{{ freshPublishToken.token }}</code>
           <button @click="copy(freshPublishToken.token, '已复制令牌')">复制</button></div>
         <div class="kv"><span>OBS 服务器</span><code>{{ obs.server.value }}</code>
@@ -291,9 +318,25 @@ const statusOptions: { value: EventStatus; label: string }[] = [
       <div class="row right">
         <button v-if="event.publishTokenPreview" :disabled="rotatingToken" @click="clearPublishToken">清除</button>
         <button class="primary" :disabled="rotatingToken" @click="rotatePublishToken">
-          {{ rotatingToken ? '生成中…' : event.publishTokenPreview ? '重新生成' : '生成推流令牌' }}
+          {{ rotatingToken ? '生成中…' : event.publishTokenPreview ? '重新生成' : '生成随机令牌' }}
         </button>
       </div>
+
+      <div class="row custom-token">
+        <input
+          v-model="customToken"
+          placeholder="或自定义令牌（8–128 位，字母数字及 . _ - ~）"
+          @keyup.enter="setCustomPublishToken"
+        />
+        <button
+          class="primary"
+          :disabled="rotatingToken || !customTokenValid"
+          @click="setCustomPublishToken"
+        >应用自定义</button>
+      </div>
+      <p v-if="customToken && !customTokenValid" class="muted small warn-text">
+        令牌需 8–128 位，仅含字母、数字及 <code class="mono">. _ - ~</code>。
+      </p>
     </section>
 
     <!-- roster -->
@@ -376,6 +419,9 @@ const statusOptions: { value: EventStatus; label: string }[] = [
 .fresh { border-color: var(--ok); }
 .fresh-row { border-top: 1px solid var(--border); padding: 0.6rem 0; }
 .fresh-token { border: 1px solid var(--ok); border-radius: 8px; padding: 0.6rem 0.75rem; margin: 0.5rem 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.custom-token { gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
+.custom-token input { flex: 1; min-width: 200px; }
+.warn-text { color: var(--danger); }
 .kv { display: flex; align-items: center; gap: 0.5rem; margin: 0.2rem 0; flex-wrap: wrap; }
 .kv span { color: var(--muted); font-size: 0.78rem; min-width: 5rem; }
 code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }

@@ -167,14 +167,49 @@ export function deleteEvent(id: number): void {
 }
 
 /**
- * Generate (or rotate) the per-event publish token. The plaintext is returned
- * ONCE; only its argon2id hash + an 8-char prefix (for on_publish lookup and
- * display) are stored. A publisher may then push
+ * Allowed publish-token charset: URL-unreserved characters that pass through
+ * URLSearchParams parsing unchanged (covers base64url A-Za-z0-9_- plus . and ~).
+ * Anything else (spaces, &, =, +, #, …) would corrupt `?token=` round-tripping
+ * through OBS → SRS → parseToken.
+ */
+const PUBLISH_TOKEN_RE = /^[A-Za-z0-9._~-]+$/
+/** min length == the prefix-index width, so on_publish lookup always works */
+const PUBLISH_TOKEN_MIN = 8
+const PUBLISH_TOKEN_MAX = 128
+
+/**
+ * Set the per-event publish token. With `custom`, the caller-chosen string is
+ * validated and stored verbatim; without it a random one is generated. The
+ * plaintext is returned once; only its argon2id hash + 8-char prefix (for
+ * on_publish lookup and display) are stored. A publisher may then push
  * `${streamName}?token=${publishToken}` inside the event's time window.
  */
-export async function rotatePublishToken(id: number): Promise<{ token: string; preview: string }> {
+export async function rotatePublishToken(
+  id: number,
+  custom?: string,
+): Promise<{ token: string; preview: string; isCustom: boolean }> {
   const existing = getRow(id)
-  const token = generateToken()
+  let token: string
+  let isCustom = false
+  if (custom != null && custom.trim() !== '') {
+    const c = custom.trim()
+    if (c.length < PUBLISH_TOKEN_MIN || c.length > PUBLISH_TOKEN_MAX) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: `令牌长度需为 ${PUBLISH_TOKEN_MIN}–${PUBLISH_TOKEN_MAX} 位`,
+      })
+    }
+    if (!PUBLISH_TOKEN_RE.test(c)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: '令牌仅可包含字母、数字及 . _ - ~',
+      })
+    }
+    token = c
+    isCustom = true
+  } else {
+    token = generateToken()
+  }
   const hash = await hashToken(token)
   const prefix = token.slice(0, 8)
   EventsRepository.update(id, {
@@ -182,8 +217,10 @@ export async function rotatePublishToken(id: number): Promise<{ token: string; p
     publishTokenPrefix: prefix,
     updatedAt: new Date(),
   })
-  audit('info', 'admin', `publish token rotated: ${existing.name}`, { eventId: id })
-  return { token, preview: prefix }
+  audit('info', 'admin', `publish token ${isCustom ? 'set (custom)' : 'rotated'}: ${existing.name}`, {
+    eventId: id,
+  })
+  return { token, preview: prefix, isCustom }
 }
 
 /** Clear (revoke) the per-event publish token. */
