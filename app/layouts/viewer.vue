@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Minimal public-facing shell — no admin nav. Anonymous guests watch via
-// passphrase; logged-in accounts (admin/viewer) see their name + a logout link.
+// Minimal public-facing shell — no admin nav. Shows the event schedule;
+// logged-in accounts (admin/viewer) see their name + a logout link.
 const { user, fetchSession, logout } = useAuth()
 await callOnce('viewer:session', () => fetchSession())
 </script>
@@ -8,7 +8,7 @@ await callOnce('viewer:session', () => fetchSession())
 <template>
   <div class="viewer-shell">
     <header class="viewer-header">
-      <NuxtLink to="/viewer" class="brand">Constrainable Ingest · 观看</NuxtLink>
+      <NuxtLink to="/viewer" class="brand">Constrainable Ingest · 时间表</NuxtLink>
       <div class="auth">
         <template v-if="user">
           <span class="user">{{ user.username }}</span>

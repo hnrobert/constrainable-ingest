@@ -30,10 +30,6 @@ export const env = {
   socketPort: Number(process.env.SOCKET_PORT || '3001'),
   /** Browser-visible SRS host for playback URLs (LAN/public IP) */
   publicHost: process.env.PUBLIC_HOST || '127.0.0.1',
-
-  /** First-boot admin credentials */
-  adminUsername: process.env.ADMIN_USERNAME || 'admin',
-  adminPassword: process.env.ADMIN_PASSWORD || '',
 } as const
 
 export type Env = typeof env

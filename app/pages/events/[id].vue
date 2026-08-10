@@ -110,6 +110,39 @@ async function removeEntry(enrollmentId: number): Promise<void> {
 // ---- keys ----
 const freshKeys = ref<GeneratedKey[]>([])
 const genForm = reactive({ studentNumber: '', name: '', email: '', seatLabel: '', streamName: '' })
+
+// ---- per-event publish token ----
+const freshPublishToken = ref<{ token: string; preview: string } | null>(null)
+const rotatingToken = ref(false)
+async function rotatePublishToken(): Promise<void> {
+  if (event.value?.publishTokenPreview && !confirm('重新生成将使旧推流令牌立即失效，确定？')) return
+  rotatingToken.value = true
+  try {
+    const r = await $fetch<{ token: string; preview: string }>(`/api/events/${id}/publish-token`, {
+      method: 'POST',
+    })
+    freshPublishToken.value = r
+    await refreshEvent()
+    if (event.value) settings.value = structuredClone(toRaw(event.value))
+    toast.success('推流令牌已生成（请立即复制，仅显示一次）')
+  } catch (e: any) {
+    toast.error('生成失败：' + (e?.data?.statusMessage || e?.message || ''))
+  } finally {
+    rotatingToken.value = false
+  }
+}
+async function clearPublishToken(): Promise<void> {
+  if (!confirm('清除推流令牌？使用该令牌的推流将被拒绝。')) return
+  try {
+    await $fetch(`/api/events/${id}/publish-token`, { method: 'DELETE' })
+    freshPublishToken.value = null
+    await refreshEvent()
+    toast.info('已清除')
+  } catch (e: any) {
+    toast.error('清除失败：' + (e?.data?.statusMessage || e?.message || ''))
+  }
+}
+
 const generating = ref(false)
 async function generateOne(): Promise<void> {
   if (!genForm.studentNumber.trim() || !genForm.name.trim()) {
@@ -233,6 +266,36 @@ const statusOptions: { value: EventStatus; label: string }[] = [
       </div>
     </section>
 
+    <!-- per-event publish token -->
+    <section class="card">
+      <div class="between">
+        <h2>赛事推流令牌</h2>
+        <span v-if="event.publishTokenPreview" class="badge ok">已设置 <code class="mono">{{ event.publishTokenPreview }}…</code></span>
+        <span v-else class="badge muted">未设置</span>
+      </div>
+      <p class="muted small">
+        每个赛事一个推流令牌，发给本赛事全体推流者。OBS 推流密钥为 <code class="mono">&lt;流名&gt;?token=&lt;令牌&gt;</code>，
+        仅在赛事时间窗口内有效（与按学生生成的密钥二选一即可）。
+      </p>
+
+      <div v-if="freshPublishToken" class="fresh-token">
+        <strong>新令牌（仅显示一次，请立即复制）</strong>
+        <div class="kv"><span>令牌</span><code>{{ freshPublishToken.token }}</code>
+          <button @click="copy(freshPublishToken.token, '已复制令牌')">复制</button></div>
+        <div class="kv"><span>OBS 服务器</span><code>{{ obs.server.value }}</code>
+          <button @click="copy(obs.server.value, '已复制服务器地址')">复制</button></div>
+        <div class="kv"><span>推流密钥示例</span>
+          <code>{{ obs.streamKey('流名', freshPublishToken.token) }}</code></div>
+      </div>
+
+      <div class="row right">
+        <button v-if="event.publishTokenPreview" :disabled="rotatingToken" @click="clearPublishToken">清除</button>
+        <button class="primary" :disabled="rotatingToken" @click="rotatePublishToken">
+          {{ rotatingToken ? '生成中…' : event.publishTokenPreview ? '重新生成' : '生成推流令牌' }}
+        </button>
+      </div>
+    </section>
+
     <!-- roster -->
     <section class="card">
       <div class="between">
@@ -312,6 +375,7 @@ const statusOptions: { value: EventStatus; label: string }[] = [
 .empty { padding: 1.5rem; text-align: center; }
 .fresh { border-color: var(--ok); }
 .fresh-row { border-top: 1px solid var(--border); padding: 0.6rem 0; }
+.fresh-token { border: 1px solid var(--ok); border-radius: 8px; padding: 0.6rem 0.75rem; margin: 0.5rem 0; display: flex; flex-direction: column; gap: 0.25rem; }
 .kv { display: flex; align-items: center; gap: 0.5rem; margin: 0.2rem 0; flex-wrap: wrap; }
 .kv span { color: var(--muted); font-size: 0.78rem; min-width: 5rem; }
 code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }

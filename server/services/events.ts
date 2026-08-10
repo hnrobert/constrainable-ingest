@@ -8,6 +8,7 @@ import { EventsRepository } from '../repositories/events.repository'
 import type { Event } from '../database/schema'
 import { limitsOverrideSchema, type LimitsOverride } from '#shared/config'
 import { hashPassword } from '../utils/password'
+import { generateToken, hashToken } from '../utils/token'
 import { audit } from './audit'
 
 export interface EventView {
@@ -22,6 +23,8 @@ export interface EventView {
   recordEnabled: boolean
   viewerAccess: Event['viewerAccess']
   hasViewerPassphrase: boolean
+  /** fingerprint (prefix) of the per-event publish token, or null if none set. */
+  publishTokenPreview: string | null
   createdAt: number
   updatedAt: number
 }
@@ -53,6 +56,7 @@ function toView(e: Event): EventView {
     recordEnabled: e.recordEnabled,
     viewerAccess: e.viewerAccess,
     hasViewerPassphrase: !!e.viewerPassphraseHash,
+    publishTokenPreview: e.publishTokenPrefix ?? null,
     createdAt: e.createdAt.getTime(),
     updatedAt: e.updatedAt.getTime(),
   }
@@ -160,4 +164,35 @@ export function deleteEvent(id: number): void {
   const existing = getRow(id)
   EventsRepository.remove(id)
   audit('warn', 'admin', `event deleted: ${existing.name}`, { eventId: id })
+}
+
+/**
+ * Generate (or rotate) the per-event publish token. The plaintext is returned
+ * ONCE; only its argon2id hash + an 8-char prefix (for on_publish lookup and
+ * display) are stored. A publisher may then push
+ * `${streamName}?token=${publishToken}` inside the event's time window.
+ */
+export async function rotatePublishToken(id: number): Promise<{ token: string; preview: string }> {
+  const existing = getRow(id)
+  const token = generateToken()
+  const hash = await hashToken(token)
+  const prefix = token.slice(0, 8)
+  EventsRepository.update(id, {
+    publishTokenHash: hash,
+    publishTokenPrefix: prefix,
+    updatedAt: new Date(),
+  })
+  audit('info', 'admin', `publish token rotated: ${existing.name}`, { eventId: id })
+  return { token, preview: prefix }
+}
+
+/** Clear (revoke) the per-event publish token. */
+export function clearPublishToken(id: number): void {
+  const existing = getRow(id)
+  EventsRepository.update(id, {
+    publishTokenHash: null,
+    publishTokenPrefix: null,
+    updatedAt: new Date(),
+  })
+  audit('warn', 'admin', `publish token cleared: ${existing.name}`, { eventId: id })
 }

@@ -9,6 +9,12 @@ const { data } = await useFetch<SessionSnapshot[]>('/api/streams')
 const sessions = ref<Map<number, SessionSnapshot>>(new Map())
 const connected = ref(false)
 const lastViolation = ref<ViolationSnapshot | null>(null)
+const watching = ref<string | null>(null)
+const manualStream = ref('')
+
+function watchStream(name: string): void {
+  watching.value = name.trim() || null
+}
 
 const list = computed(() =>
   [...sessions.value.values()].sort((a, b) => b.startedAt - a.startedAt),
@@ -56,7 +62,18 @@ onBeforeUnmount(() => disposeSocket())
     </div>
 
     <section class="card">
-      <StreamsActiveTable :sessions="list" />
+      <StreamsActiveTable :sessions="list" @watch="watchStream" />
+    </section>
+
+    <section class="card">
+      <h2>实时观看</h2>
+      <p class="muted small">点击上表“观看”，或输入流名手动播放。浏览器直连 SRS。</p>
+      <div class="row watch-input">
+        <input v-model="manualStream" placeholder="流名称" @keyup.enter="watchStream(manualStream)" />
+        <button class="primary" @click="watchStream(manualStream)">播放</button>
+        <button v-if="watching" @click="watching = null">关闭</button>
+      </div>
+      <StreamsPlayer v-if="watching" :stream-name="watching" />
     </section>
 
     <section v-if="lastViolation" class="card violation">
@@ -70,4 +87,7 @@ onBeforeUnmount(() => disposeSocket())
 
 <style scoped>
 .violation { border-color: var(--danger); }
+.watch-input { gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+.watch-input input { max-width: 320px; }
+.small { font-size: 0.78rem; }
 </style>

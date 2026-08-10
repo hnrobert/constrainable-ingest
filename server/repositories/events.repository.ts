@@ -29,6 +29,10 @@ export const EventsRepository = {
       .orderBy(asc(events.startsAt), asc(events.id))
       .all()
   },
+  /** on_publish hot path: candidate events whose publish-token prefix matches. */
+  findByPublishTokenPrefix(prefix: string): Event[] {
+    return db.select().from(events).where(eq(events.publishTokenPrefix, prefix)).all()
+  },
   insert(values: NewEvent): Event {
     return db.insert(events).values(values).returning().get()
   },

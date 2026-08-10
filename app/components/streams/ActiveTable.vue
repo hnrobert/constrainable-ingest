@@ -2,6 +2,7 @@
 import type { SessionSnapshot, SessionStatus } from '#shared/events'
 
 const props = defineProps<{ sessions: SessionSnapshot[] }>()
+const emit = defineEmits<{ watch: [streamName: string] }>()
 
 const statusClass: Record<SessionStatus, string> = {
   pending: 'muted',
@@ -43,6 +44,7 @@ function fmtTime(ms: number): string {
         <th>码率</th>
         <th>合规</th>
         <th>开始</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
@@ -57,6 +59,7 @@ function fmtTime(ms: number): string {
           <span v-else class="muted">—</span>
         </td>
         <td class="muted">{{ fmtTime(s.startedAt) }}</td>
+        <td><button @click="emit('watch', s.streamName)">观看</button></td>
       </tr>
     </tbody>
   </table>

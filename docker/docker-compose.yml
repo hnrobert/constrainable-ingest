@@ -1,5 +1,14 @@
 # Single-machine intranet deployment: app + SRS, no reverse proxy, no TLS.
-# Browser reaches both services on the host IP + published ports.
+#
+# Network model:
+#   - The two containers talk to each other over an ISOLATED bridge network
+#     (`ingest`) using compose service names + container ports — never the host
+#     ports/localhost. app → http://srs:1985 (API) and rtmp://srs/... (pull);
+#     srs → http://app:3000/api/srs/* (http_hooks).
+#   - Host ports below are published ONLY for things that live OUTSIDE the
+#     containers: the browser (app :3000, Socket.IO :3001, SRS FLV :8080 /
+#     WHEP :1985) and OBS (RTMP :1935). PUBLIC_HOST is the browser-visible host
+#     IP for playback URLs — it is NOT used for inter-container traffic.
 services:
   app:
     build:
@@ -15,7 +24,7 @@ services:
       # storage
       DB_PATH: /app/data/app.db
       RECORD_DIR: /app/records
-      # SRS endpoints (server-to-server via compose service name)
+      # SRS endpoints (server-to-server via compose service name, NOT host ports)
       SRS_API_BASE: http://srs:1985/api/v1
       SRS_RTMP_HOST: srs
       # browser-visible host (LAN/public IP) for playback URLs
@@ -25,8 +34,6 @@ services:
       FFPROBE_PATH: ffprobe
       # auth
       SESSION_SECRET: ${SESSION_SECRET:-changeme-change-me}
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # socket.io fallback port
       SOCKET_PORT: "3001"
     volumes:
@@ -35,6 +42,8 @@ services:
     ports:
       - "3000:3000"
       - "3001:3001"   # Socket.IO (standalone, same port in dev + prod)
+    networks:
+      - ingest
     depends_on:
       - srs
     restart: unless-stopped
@@ -52,7 +61,13 @@ services:
       - ./srs-entrypoint.sh:/srs-entrypoint.sh:ro
     ports:
       - "1935:1935"   # RTMP ingest (OBS)
-      - "1985:1985"   # HTTP API + WHEP
-      - "8080:8080"   # HTTP-FLV / HLS playback
+      - "1985:1985"   # HTTP API + WHEP (browser)
+      - "8080:8080"   # HTTP-FLV / HLS playback (browser)
       - "8000:8000/udp" # WebRTC (optional)
+    networks:
+      - ingest
     restart: unless-stopped
+
+networks:
+  ingest:
+    driver: bridge

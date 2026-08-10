@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type mpegtsTypes from 'mpegts.js'
 
-const props = defineProps<{ eventId: number; streamName: string }>()
+// Admin live player. Plays a single live stream by name; URLs come from the
+// admin-only /api/streams/url endpoint. Browser connects to SRS directly.
+const props = defineProps<{ streamName: string }>()
 
 type Mode = 'flv' | 'webrtc'
 const mode = ref<Mode>('flv')
@@ -16,13 +18,12 @@ let pc: RTCPeerConnection | null = null
 async function resolveUrls(): Promise<void> {
   status.value = 'loading'
   try {
-    const r = await $fetch<{ flv: string; whep: string }>('/api/viewer/stream-url', {
-      params: { eventId: props.eventId, streamName: props.streamName },
+    urls.value = await $fetch<{ flv: string; whep: string }>('/api/streams/url', {
+      params: { streamName: props.streamName },
     })
-    urls.value = { flv: r.flv, whep: r.whep }
   } catch (e: any) {
     status.value = 'error'
-    errorMsg.value = e?.data?.statusMessage || e?.message || '无法获取播放地址（可能需要口令）'
+    errorMsg.value = e?.data?.statusMessage || e?.message || '无法获取播放地址'
   }
 }
 
@@ -119,7 +120,7 @@ onMounted(async () => {
 onBeforeUnmount(teardown)
 
 watch(
-  () => [props.eventId, props.streamName],
+  () => props.streamName,
   async () => {
     await resolveUrls()
     if (urls.value) await (mode.value === 'flv' ? startFlv() : startWebrtc())
@@ -130,6 +131,7 @@ watch(
 <template>
   <div class="player card">
     <div class="bar between">
+      <span class="badge mono">{{ props.streamName }}</span>
       <span class="badge" :class="{
         ok: status === 'playing',
         warn: status === 'loading',
@@ -145,16 +147,15 @@ watch(
     </div>
     <video ref="videoEl" class="video" autoplay muted playsinline controls />
     <p v-if="errorMsg" class="badge danger">{{ errorMsg }}</p>
-    <p class="muted small">
-      浏览器直连 SRS 播放。若 WebRTC 不通，请使用 FLV。口令仅在首次访问时输入。
-    </p>
+    <p class="muted small">浏览器直连 SRS 播放。若 WebRTC 不通，请使用 FLV。</p>
   </div>
 </template>
 
 <style scoped>
 .player { display: flex; flex-direction: column; gap: 0.5rem; }
-.bar { flex-wrap: wrap; }
-.modes { display: flex; gap: 0.4rem; }
+.bar { flex-wrap: wrap; gap: 0.5rem; }
+.modes { display: flex; gap: 0.4rem; margin-left: auto; }
 .video { width: 100%; background: #000; border-radius: 8px; aspect-ratio: 16 / 9; }
 .small { font-size: 0.78rem; }
+.mono { font-family: ui-monospace, monospace; font-size: 0.82rem; }
 </style>

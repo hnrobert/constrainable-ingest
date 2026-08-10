@@ -4,10 +4,17 @@
  * OBS stream key = `${streamName}?token=${plaintext}` → SRS splits it into
  * `stream` = streamName and `param` = "?token=plaintext" in the on_publish body.
  *
- * Resolution: look up stream_keys by streamName → for each non-revoked key,
- * verify the token → on match, allow (and return event/student context).
- * No key at all: allowed only when access.rejectUnknownPublishers is false
- * (open-access mode; the session is recorded against no event).
+ * Two credential kinds, both honoured, both time-window-gated:
+ *   1. per-student stream key — looked up by streamName; the token verifies
+ *      against stream_keys.token_hash. Resolves student attribution.
+ *   2. per-event publish token — when no stream key matches, the token is
+ *      checked against events.publish_token_hash (prefix-indexed). Lets an
+ *      organizer hand the whole class one token valid only inside the window.
+ *
+ * A stream is only allowed while inside its event's [startsAt, endsAt] window
+ * (each bound enforced only when set). No key/token at all: allowed only when
+ * access.rejectUnknownPublishers is false (open-access; recorded against no
+ * event, so no window applies).
  */
 import { StreamKeysRepository } from '../repositories/stream-keys.repository'
 import { EventsRepository } from '../repositories/events.repository'
@@ -15,6 +22,7 @@ import { EnrollmentsRepository } from '../repositories/enrollments.repository'
 import { StudentsRepository } from '../repositories/students.repository'
 import { getConfig } from '../utils/config-store'
 import { verifyToken } from '../utils/token'
+import type { Event } from '../database/schema'
 
 export interface AuthContext {
   stream: string
@@ -40,45 +48,78 @@ export function parseToken(param: string): string | null {
   return new URLSearchParams(q).get('token')
 }
 
+/**
+ * Enforce the event's scheduled window. Returns a reject reason when the
+ * publisher is outside the window, or null when within it. A bound that is null
+ * (unset) is not enforced — so an event with no times is always in-window.
+ */
+function withinWindow(e: Pick<Event, 'startsAt' | 'endsAt'>): string | null {
+  const now = Date.now()
+  if (e.startsAt && now < e.startsAt.getTime()) return 'event not started'
+  if (e.endsAt && now > e.endsAt.getTime()) return 'event ended'
+  return null
+}
+
+/** Resolve an event by its per-event publish token (prefix lookup + verify). */
+async function findEventByPublishToken(token: string): Promise<Event | null> {
+  if (token.length < 8) return null // prefix must be stable; short tokens skip
+  const candidates = EventsRepository.findByPublishTokenPrefix(token.slice(0, 8))
+  for (const e of candidates) {
+    if (!e.publishTokenHash) continue
+    if (await verifyToken(token, e.publishTokenHash)) return e
+  }
+  return null
+}
+
 export async function authorizePublish(ctx: AuthContext): Promise<AuthResult> {
   const cfg = getConfig()
 
-  // All keys for this streamName (a reissue rotates in place; old ones revoked)
   const keys = StreamKeysRepository.findAllByStreamName(ctx.stream)
-
-  if (keys.length === 0) {
-    return cfg.access.rejectUnknownPublishers
-      ? { allow: false, reason: 'unknown stream name' }
-      : { allow: true, eventId: null, streamKeyId: -1, studentLabel: null }
-  }
-
   const token = parseToken(ctx.param)
-  if (!token) return { allow: false, reason: 'missing token' }
 
-  for (const key of keys) {
-    if (key.revoked) continue
-    const ok = await verifyToken(token, key.tokenHash)
-    if (!ok) continue
+  // Path 1 — per-student stream key (by streamName).
+  if (keys.length > 0 && token) {
+    for (const key of keys) {
+      if (key.revoked) continue
+      if (!(await verifyToken(token, key.tokenHash))) continue
 
-    const event = EventsRepository.findById(key.eventId)
-    if (!event || event.status === 'archived') {
-      return { allow: false, reason: 'event closed' }
-    }
+      const event = EventsRepository.findById(key.eventId)
+      if (!event || event.status === 'archived') {
+        return { allow: false, reason: 'event closed' }
+      }
+      const windowReason = withinWindow(event)
+      if (windowReason) return { allow: false, reason: windowReason }
 
-    // record last use + resolve student label
-    StreamKeysRepository.touch(key.id)
-    const studentLabel = resolveStudentLabel(key.enrollmentId)
-
-    return {
-      allow: true,
-      eventId: event.id,
-      streamKeyId: key.id,
-      studentLabel,
+      StreamKeysRepository.touch(key.id)
+      return {
+        allow: true,
+        eventId: event.id,
+        streamKeyId: key.id,
+        studentLabel: resolveStudentLabel(key.enrollmentId),
+      }
     }
   }
 
-  // keys exist but none matched (all revoked or bad token)
-  return { allow: false, reason: keys.some((k) => !k.revoked) ? 'bad token' : 'key revoked' }
+  // Path 2 — per-event publish token (fallback when no student key matched).
+  if (token) {
+    const event = await findEventByPublishToken(token)
+    if (event) {
+      if (event.status === 'archived') return { allow: false, reason: 'event closed' }
+      const windowReason = withinWindow(event)
+      if (windowReason) return { allow: false, reason: windowReason }
+      return { allow: true, eventId: event.id, streamKeyId: -1, studentLabel: null }
+    }
+  }
+
+  // Path 3 — nothing matched.
+  if (keys.length > 0) {
+    // streamName is known but the token didn't satisfy any key or the event token.
+    if (!token) return { allow: false, reason: 'missing token' }
+    return { allow: false, reason: keys.some((k) => !k.revoked) ? 'bad token' : 'key revoked' }
+  }
+  return cfg.access.rejectUnknownPublishers
+    ? { allow: false, reason: 'unknown stream name' }
+    : { allow: true, eventId: null, streamKeyId: -1, studentLabel: null }
 }
 
 function resolveStudentLabel(enrollmentId: number | null): string | null {

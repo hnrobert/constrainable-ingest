@@ -45,10 +45,17 @@ export const events = sqliteTable(
       .notNull()
       .default('public'),
     viewerPassphraseHash: text('viewer_passphrase_hash'),
+    /** argon2id hash of the per-event publish token (alternative to per-student stream keys). */
+    publishTokenHash: text('publish_token_hash'),
+    /** first chars of the plaintext token — indexed for on_publish prefix lookup. */
+    publishTokenPrefix: text('publish_token_prefix'),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(now),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(now),
   },
-  (t) => [index('events_status_idx').on(t.status)],
+  (t) => [
+    index('events_status_idx').on(t.status),
+    index('events_publish_token_prefix_idx').on(t.publishTokenPrefix),
+  ],
 )
 
 /* -------------------------------- students -------------------------------- */

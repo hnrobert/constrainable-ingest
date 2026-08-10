@@ -14,6 +14,8 @@ export interface EventView {
   recordEnabled: boolean
   viewerAccess: ViewerAccess
   hasViewerPassphrase: boolean
+  /** fingerprint (prefix) of the per-event publish token, or null if none set. */
+  publishTokenPreview: string | null
   createdAt: number
   updatedAt: number
 }
