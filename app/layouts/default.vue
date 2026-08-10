@@ -38,7 +38,6 @@ const nav = computed(() => (isAdmin.value ? [...baseNav, ...adminNav] : baseNav)
     <main class="app-main">
       <slot />
     </main>
-    <UiAppToast />
   </div>
 </template>
 

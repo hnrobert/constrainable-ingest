@@ -16,7 +16,6 @@ const { user } = useAuth()
     <main class="pub-main">
       <slot />
     </main>
-    <UiAppToast />
   </div>
 </template>
 

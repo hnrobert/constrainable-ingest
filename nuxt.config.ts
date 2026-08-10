@@ -5,6 +5,11 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   ssr: true,
 
+  // vue-sonner toast host: auto-registers the client-only <Toaster> component
+  // (mounted once in app.vue) and injects vue-sonner/style.css. Pages fire
+  // toasts via useToast() instead of a per-page element.
+  modules: ['vue-sonner/nuxt'],
+
   // node-server preset. Socket.IO attaches to the same HTTP server via a
   // first-request lazy attach (server/middleware/00-socket.ts) — the Nitro
   // `listen` hook is NOT emitted by this preset, so we can't attach at startup.
