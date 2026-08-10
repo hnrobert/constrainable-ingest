@@ -65,7 +65,7 @@ export const students = sqliteTable(
   'students',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    /** 学号 */
+    /** student ID */
     studentNumber: text('student_number').notNull().unique(),
     name: text('name').notNull(),
     email: text('email'),

@@ -8,13 +8,13 @@ await callOnce('viewer:session', () => fetchSession())
 <template>
   <div class="viewer-shell">
     <header class="viewer-header">
-      <NuxtLink to="/viewer" class="brand">Constrainable Ingest · 时间表</NuxtLink>
+      <NuxtLink to="/viewer" class="brand">Constrainable Ingest · Schedule</NuxtLink>
       <div class="auth">
         <template v-if="user">
           <span class="user">{{ user.email }}</span>
-          <button class="ghost" @click="logout">登出</button>
+          <button class="ghost" @click="logout">Sign out</button>
         </template>
-        <NuxtLink v-else to="/login" class="login-link">登录</NuxtLink>
+        <NuxtLink v-else to="/login" class="login-link">Sign in</NuxtLink>
       </div>
     </header>
     <main class="viewer-main">

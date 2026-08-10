@@ -14,13 +14,13 @@ const statusClass: Record<SessionStatus, string> = {
   ended: 'muted',
 }
 const statusLabel: Record<SessionStatus, string> = {
-  pending: '等待',
-  allowed: '推流中',
-  compliant: '合规',
-  violating: '违规',
-  killed: '已踢除',
-  rejected: '已拒绝',
-  ended: '已结束',
+  pending: 'Pending',
+  allowed: 'Publishing',
+  compliant: 'Compliant',
+  violating: 'Violating',
+  killed: 'Kicked',
+  rejected: 'Rejected',
+  ended: 'Ended',
 }
 
 function resolution(s: SessionSnapshot): string {
@@ -28,22 +28,22 @@ function resolution(s: SessionSnapshot): string {
   return '—'
 }
 function fmtTime(ms: number): string {
-  return new Date(ms).toLocaleTimeString('zh-CN', { hour12: false })
+  return new Date(ms).toLocaleTimeString('en-US', { hour12: false })
 }
 </script>
 
 <template>
-  <div v-if="props.sessions.length === 0" class="muted empty">暂无活跃推流。</div>
+  <div v-if="props.sessions.length === 0" class="muted empty">No active streams.</div>
   <table v-else>
     <thead>
       <tr>
-        <th>流名称</th>
-        <th>状态</th>
-        <th>分辨率</th>
-        <th>帧率</th>
-        <th>码率</th>
-        <th>合规</th>
-        <th>开始</th>
+        <th>Stream name</th>
+        <th>Status</th>
+        <th>Resolution</th>
+        <th>Framerate</th>
+        <th>Bitrate</th>
+        <th>Compliant</th>
+        <th>Started</th>
         <th></th>
       </tr>
     </thead>
@@ -59,7 +59,7 @@ function fmtTime(ms: number): string {
           <span v-else class="muted">—</span>
         </td>
         <td class="muted">{{ fmtTime(s.startedAt) }}</td>
-        <td><button @click="emit('watch', s.streamName)">观看</button></td>
+        <td><button @click="emit('watch', s.streamName)">Watch</button></td>
       </tr>
     </tbody>
   </table>

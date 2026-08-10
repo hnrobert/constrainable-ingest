@@ -5,6 +5,6 @@
 <template>
   <section>
     <h1>Constrainable Ingest</h1>
-    <p>ICPC 监考收流服务 · Nuxt 4 + Bun 脚手架就绪。</p>
+    <p>ICPC proctoring ingest service · Nuxt 4 + Bun scaffold ready.</p>
   </section>
 </template>

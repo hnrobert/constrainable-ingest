@@ -16,16 +16,16 @@ const statusClass: Record<EventStatus, string> = {
   archived: 'danger',
 }
 const statusLabel: Record<EventStatus, string> = {
-  draft: '草稿',
-  scheduled: '待开始',
-  live: '进行中',
-  ended: '已结束',
-  archived: '已归档',
+  draft: 'Draft',
+  scheduled: 'Scheduled',
+  live: 'Live',
+  ended: 'Ended',
+  archived: 'Archived',
 }
 
 async function create(): Promise<void> {
   if (!form.name.trim()) {
-    toast.error('请填写赛事名称')
+    toast.error('Please fill in the event name')
     return
   }
   saving.value = true
@@ -34,14 +34,14 @@ async function create(): Promise<void> {
       method: 'POST',
       body: { name: form.name, slug: form.slug || undefined, description: form.description || undefined },
     })
-    toast.success('赛事已创建')
+    toast.success('Event created')
     form.name = ''
     form.slug = ''
     form.description = ''
     creating.value = false
     await refresh()
   } catch (e: any) {
-    toast.error('创建失败：' + (e?.data?.statusMessage || e?.message || ''))
+    toast.error('Create failed: ' + (e?.data?.statusMessage || e?.message || ''))
   } finally {
     saving.value = false
   }
@@ -52,46 +52,46 @@ async function create(): Promise<void> {
   <div class="stack">
     <div class="between">
       <div>
-        <h1>赛事</h1>
-        <p class="muted">每场赛事有独立名单、推流密钥与配置覆盖。</p>
+        <h1>Events</h1>
+        <p class="muted">Each event has its own roster, stream keys, and config overrides.</p>
       </div>
       <button class="primary" @click="creating = !creating">
-        {{ creating ? '取消' : '＋ 新建赛事' }}
+        {{ creating ? 'Cancel' : '+ New event' }}
       </button>
     </div>
 
     <section v-if="creating" class="card">
-      <h2>新建赛事</h2>
+      <h2>New event</h2>
       <div class="form-grid">
         <label class="field">
-          <span class="field-label">名称 *</span>
-          <input v-model="form.name" placeholder="例如：2026 区域赛" />
+          <span class="field-label">Name *</span>
+          <input v-model="form.name" placeholder="e.g. 2026 Regional" />
         </label>
         <label class="field">
-          <span class="field-label">slug（留空自动生成）</span>
-          <input v-model="form.slug" placeholder="例如：regional-2026" />
+          <span class="field-label">slug (auto-generated if blank)</span>
+          <input v-model="form.slug" placeholder="e.g. regional-2026" />
         </label>
         <label class="field full">
-          <span class="field-label">描述</span>
+          <span class="field-label">Description</span>
           <input v-model="form.description" />
         </label>
       </div>
       <div class="row right">
-        <button class="primary" :disabled="saving" @click="create">{{ saving ? '创建中…' : '创建' }}</button>
+        <button class="primary" :disabled="saving" @click="create">{{ saving ? 'Creating…' : 'Create' }}</button>
       </div>
     </section>
 
     <section class="card">
       <table>
         <thead>
-          <tr><th>名称</th><th>slug</th><th>状态</th><th></th></tr>
+          <tr><th>Name</th><th>slug</th><th>Status</th><th></th></tr>
         </thead>
         <tbody>
           <tr v-for="e in events" :key="e.id">
             <td>{{ e.name }}</td>
             <td class="muted">{{ e.slug }}</td>
             <td><span class="badge" :class="statusClass[e.status]">{{ statusLabel[e.status] }}</span></td>
-            <td><NuxtLink :to="`/events/${e.id}`"><button>管理</button></NuxtLink></td>
+            <td><NuxtLink :to="`/events/${e.id}`"><button>Manage</button></NuxtLink></td>
           </tr>
         </tbody>
       </table>

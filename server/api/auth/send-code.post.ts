@@ -29,10 +29,10 @@ export default defineEventHandler(async (event) => {
   const session = String(body?.session ?? '')
 
   if (!EMAIL_RE.test(email)) {
-    throw createError({ statusCode: 400, statusMessage: '邮箱格式无效' })
+    throw createError({ statusCode: 400, statusMessage: 'Invalid email format' })
   }
   if (!session) {
-    throw createError({ statusCode: 400, statusMessage: '缺少会话标识' })
+    throw createError({ statusCode: 400, statusMessage: 'Missing session identifier' })
   }
 
   // Bootstrap: no users yet → first admin needs no code.
@@ -42,11 +42,11 @@ export default defineEventHandler(async (event) => {
 
   // Disallowed mailing-list addresses never get a code (403, like the verifier).
   if (isDisallowedEmail(email)) {
-    throw createError({ statusCode: 403, statusMessage: '该邮箱地址不允许注册' })
+    throw createError({ statusCode: 403, statusMessage: 'This email address is not allowed to register' })
   }
   // Domain whitelist (bootstrap is exempt — handled above).
   if (!passesWhitelist(email)) {
-    throw createError({ statusCode: 403, statusMessage: '该邮箱域名不在允许注册的范围' })
+    throw createError({ statusCode: 403, statusMessage: 'This email domain is not allowed to register' })
   }
   // Don't reveal whether an account already exists (anti-enumeration), and don't
   // spam existing users — return the same OK the success path does (verifier parity).
@@ -56,7 +56,7 @@ export default defineEventHandler(async (event) => {
   // Mail must be configured before we rate-limit/send: an un-sendable request
   // shouldn't count against the recipient's quota (verifier order).
   if (!isMailConfigured()) {
-    throw createError({ statusCode: 503, statusMessage: '邮件服务未配置，请联系管理员' })
+    throw createError({ statusCode: 503, statusMessage: 'Mail service is not configured, please contact the admin' })
   }
 
   const limit = checkEmailSend('code', email)
@@ -76,7 +76,7 @@ export default defineEventHandler(async (event) => {
     audit('error', 'auth', `verification code send failed: ${email}`, {
       detail: { error: err instanceof Error ? err.message : String(err) },
     })
-    throw createError({ statusCode: 502, statusMessage: '验证码发送失败，请稍后重试或联系管理员' })
+    throw createError({ statusCode: 502, statusMessage: 'Failed to send verification code, please try again later or contact the admin' })
   }
 
   audit('info', 'auth', `verification code sent: ${email}`)

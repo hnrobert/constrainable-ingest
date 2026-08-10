@@ -14,21 +14,21 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const to = normalizeEmail(String(body?.to ?? ''))
   if (!EMAIL_RE.test(to)) {
-    throw createError({ statusCode: 400, statusMessage: '收件人邮箱格式无效' })
+    throw createError({ statusCode: 400, statusMessage: 'Invalid recipient email format' })
   }
 
   const limit = checkEmailSend('test', to)
   if (!limit.allowed) throwEmailLimit(limit)
 
   if (!isMailConfigured()) {
-    throw createError({ statusCode: 503, statusMessage: '邮件服务未配置' })
+    throw createError({ statusCode: 503, statusMessage: 'Mail service is not configured' })
   }
 
   try {
     await sendMailWithConfig(getMailConfig(), {
       to,
-      subject: '【监考收流平台】测试邮件',
-      body: '<p>这是一封来自监考收流平台的测试邮件，如果你收到了它，说明邮件配置正常。</p>',
+      subject: '[Constrainable Ingest]Test email',
+      body: '<p>This is a test email from Constrainable Ingest. If you received it, your mail configuration is working correctly.</p>',
       html: true,
     })
   } catch (err) {
@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
     })
     throw createError({
       statusCode: 502,
-      statusMessage: '发送失败：' + (err instanceof Error ? err.message : String(err)),
+      statusMessage: 'Send failed: ' + (err instanceof Error ? err.message : String(err)),
     })
   }
 

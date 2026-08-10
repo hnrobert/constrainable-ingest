@@ -11,7 +11,7 @@ const filters = reactive<{ eventId: string; date: string; q: string }>({
   date: '',
   q: '',
 })
-// applied filters drive the query; updated on 查询
+// applied filters drive the query; updated on search
 const applied = ref({ ...filters })
 const { data, refresh, pending } = await useFetch<RecordingView[]>('/api/recordings', {
   query: applied,
@@ -37,7 +37,7 @@ function play(r: RecordingView): void {
 async function onDeleted(id: number): Promise<void> {
   selectedId.value = null
   await refresh()
-  toast.info(`已从列表移除 #${id}`)
+  toast.info(`Removed from list #${id}`)
 }
 
 function fmtSize(bytes: number): string {
@@ -46,38 +46,38 @@ function fmtSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 function fmtDate(ms: number): string {
-  return new Date(ms).toLocaleString('zh-CN', { hour12: false })
+  return new Date(ms).toLocaleString('en-US', { hour12: false })
 }
 </script>
 
 <template>
   <div class="stack">
     <div>
-      <h1>录像</h1>
-      <p class="muted">合规流的存档录像，支持在线播放、下载与删除。</p>
+      <h1>Recordings</h1>
+      <p class="muted">Archived recordings of compliant streams, with online playback, download, and deletion.</p>
     </div>
 
     <section class="card filters">
       <div class="row">
         <label class="field">
-          <span class="field-label">赛事</span>
+          <span class="field-label">Event</span>
           <select v-model="filters.eventId">
-            <option value="">全部</option>
+            <option value="">All</option>
             <option v-for="e in events" :key="e.id" :value="String(e.id)">{{ e.name }}</option>
           </select>
         </label>
         <label class="field">
-          <span class="field-label">日期</span>
+          <span class="field-label">Date</span>
           <input type="date" v-model="filters.date" />
         </label>
         <label class="field grow">
-          <span class="field-label">搜索（流名/学生）</span>
-          <input type="text" v-model="filters.q" placeholder="学号、姓名或流名…" @keyup.enter="apply" />
+          <span class="field-label">Search (stream name / student)</span>
+          <input type="text" v-model="filters.q" placeholder="Student ID, name, or stream name…" @keyup.enter="apply" />
         </label>
       </div>
       <div class="row right">
-        <button @click="resetFilters">清空</button>
-        <button class="primary" @click="apply">查询</button>
+        <button @click="resetFilters">Clear</button>
+        <button class="primary" @click="apply">Search</button>
       </div>
     </section>
 
@@ -85,18 +85,18 @@ function fmtDate(ms: number): string {
 
     <section class="card">
       <div class="between">
-        <h2>共 {{ data?.length ?? 0 }} 条</h2>
-        <button :disabled="pending" @click="refresh()">{{ pending ? '刷新中…' : '刷新' }}</button>
+        <h2>Total {{ data?.length ?? 0 }}</h2>
+        <button :disabled="pending" @click="refresh()">{{ pending ? 'Refreshing…' : 'Refresh' }}</button>
       </div>
-      <div v-if="!data || data.length === 0" class="muted empty">暂无录像。</div>
+      <div v-if="!data || data.length === 0" class="muted empty">No recordings.</div>
       <table v-else>
         <thead>
           <tr>
-            <th>流名</th>
-            <th>学生</th>
-            <th>大小</th>
-            <th>分辨率</th>
-            <th>开始时间</th>
+            <th>Stream name</th>
+            <th>Student</th>
+            <th>Size</th>
+            <th>Resolution</th>
+            <th>Start time</th>
             <th></th>
           </tr>
         </thead>
@@ -107,7 +107,7 @@ function fmtDate(ms: number): string {
             <td>{{ fmtSize(r.sizeBytes) }}</td>
             <td class="muted">{{ r.width && r.height ? `${r.width}×${r.height}` : '—' }}</td>
             <td class="muted">{{ fmtDate(r.startedAt) }}</td>
-            <td><button @click="play(r)">播放</button></td>
+            <td><button @click="play(r)">Play</button></td>
           </tr>
         </tbody>
       </table>

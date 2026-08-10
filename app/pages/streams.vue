@@ -35,15 +35,15 @@ onMounted(() => {
   socket.on('session:violation', (s: ViolationSnapshot) => {
     upsert(s)
     lastViolation.value = s
-    toast.error(`违规：${s.streamName}（${s.reasons.join('；')}）`)
+    toast.error(`Violation: ${s.streamName} (${s.reasons.join('; ')})`)
   })
   socket.on('session:stop', (s: SessionSnapshot) => {
     sessions.value.delete(s.sessionId)
   })
   socket.on('recording:ready', (r: RecordingSnapshot) =>
-    toast.success(`录像就绪：${r.streamName}`),
+    toast.success(`Recording ready: ${r.streamName}`),
   )
-  socket.on('config:changed', () => toast.info('运行配置已热重载'))
+  socket.on('config:changed', () => toast.info('Runtime config hot-reloaded'))
 })
 
 onBeforeUnmount(() => disposeSocket())
@@ -53,11 +53,11 @@ onBeforeUnmount(() => disposeSocket())
   <div class="stack">
     <div class="between">
       <div>
-        <h1>实时推流</h1>
-        <p class="muted">活跃会话与实时指标，违规即时告警。</p>
+        <h1>Live Streams</h1>
+        <p class="muted">Active sessions and real-time metrics with instant violation alerts.</p>
       </div>
       <span class="badge" :class="connected ? 'ok' : 'warn'">
-        {{ connected ? '● 已连接' : '○ 连接中…' }}
+        {{ connected ? '● Connected' : '○ Connecting…' }}
       </span>
     </div>
 
@@ -66,21 +66,21 @@ onBeforeUnmount(() => disposeSocket())
     </section>
 
     <section class="card">
-      <h2>实时观看</h2>
-      <p class="muted small">点击上表“观看”，或输入流名手动播放。浏览器直连 SRS。</p>
+      <h2>Watch Live</h2>
+      <p class="muted small">Click "Watch" in the table above, or enter a stream name to play manually. The browser connects directly to SRS.</p>
       <div class="row watch-input">
-        <input v-model="manualStream" placeholder="流名称" @keyup.enter="watchStream(manualStream)" />
-        <button class="primary" @click="watchStream(manualStream)">播放</button>
-        <button v-if="watching" @click="watching = null">关闭</button>
+        <input v-model="manualStream" placeholder="Stream name" @keyup.enter="watchStream(manualStream)" />
+        <button class="primary" @click="watchStream(manualStream)">Play</button>
+        <button v-if="watching" @click="watching = null">Close</button>
       </div>
       <StreamsPlayer v-if="watching" :stream-name="watching" />
     </section>
 
     <section v-if="lastViolation" class="card violation">
-      <strong>最近一次违规：</strong>
+      <strong>Last violation:</strong>
       {{ lastViolation.streamName }} —
-      {{ lastViolation.reasons.join('；') }}
-      <span class="muted">（{{ new Date(lastViolation.startedAt).toLocaleTimeString('zh-CN', { hour12: false }) }}）</span>
+      {{ lastViolation.reasons.join('; ') }}
+      <span class="muted">({{ new Date(lastViolation.startedAt).toLocaleTimeString('en-US', { hour12: false }) }})</span>
     </section>
   </div>
 </template>

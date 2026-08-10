@@ -32,16 +32,16 @@ export default defineEventHandler(async (event) => {
   const session = String(body?.session ?? '')
 
   if (!EMAIL_RE.test(email)) {
-    throw createError({ statusCode: 400, statusMessage: '邮箱格式无效' })
+    throw createError({ statusCode: 400, statusMessage: 'Invalid email format' })
   }
   if (password.length < MIN_PASSWORD) {
-    throw createError({ statusCode: 400, statusMessage: `密码至少 ${MIN_PASSWORD} 位` })
+    throw createError({ statusCode: 400, statusMessage: `Password must be at least ${MIN_PASSWORD} characters` })
   }
   if (isDisallowedEmail(email)) {
-    throw createError({ statusCode: 403, statusMessage: '该邮箱地址不允许注册' })
+    throw createError({ statusCode: 403, statusMessage: 'This email address is not allowed to register' })
   }
   if (UsersRepository.findByEmail(email)) {
-    throw createError({ statusCode: 409, statusMessage: '该邮箱已注册' })
+    throw createError({ statusCode: 409, statusMessage: 'This email is already registered' })
   }
 
   const isFirst = UsersRepository.isEmpty()
@@ -49,10 +49,10 @@ export default defineEventHandler(async (event) => {
   // Non-bootstrap registrations must pass the whitelist and a valid code.
   if (!isFirst) {
     if (!passesWhitelist(email)) {
-      throw createError({ statusCode: 403, statusMessage: '该邮箱域名不在允许注册的范围' })
+      throw createError({ statusCode: 403, statusMessage: 'This email domain is not allowed to register' })
     }
     if (!session || !consumeCode(email, session, code)) {
-      throw createError({ statusCode: 400, statusMessage: '验证码无效或已过期' })
+      throw createError({ statusCode: 400, statusMessage: 'Verification code is invalid or expired' })
     }
   }
 

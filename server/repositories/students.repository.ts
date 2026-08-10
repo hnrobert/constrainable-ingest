@@ -1,6 +1,6 @@
 /**
  * students table — data access only. Students are global (reused across
- * events); resolved by student number (学号).
+ * events); resolved by student number (student ID).
  */
 import { eq } from 'drizzle-orm'
 import { db } from '../database/db'

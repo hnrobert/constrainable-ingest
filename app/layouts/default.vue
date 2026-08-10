@@ -5,13 +5,13 @@
 const { user, logout } = useAuth()
 
 const nav = [
-  { label: '概览', to: '/' },
-  { label: '实时', to: '/streams' },
-  { label: '赛事', to: '/events' },
-  { label: '录像', to: '/recordings' },
-  { label: '配置', to: '/config' },
-  { label: '邮件', to: '/mail' },
-  { label: '审计', to: '/audit', enabled: false },
+  { label: 'Overview', to: '/' },
+  { label: 'Live', to: '/streams' },
+  { label: 'Events', to: '/events' },
+  { label: 'Recordings', to: '/recordings' },
+  { label: 'Config', to: '/config' },
+  { label: 'Mail', to: '/mail' },
+  { label: 'Audit', to: '/audit', enabled: false },
 ]
 </script>
 
@@ -22,13 +22,13 @@ const nav = [
       <nav class="app-nav">
         <template v-for="item in nav" :key="item.to">
           <NuxtLink v-if="item.enabled !== false" :to="item.to">{{ item.label }}</NuxtLink>
-          <span v-else class="nav-disabled" :title="`未实现（${item.label}）`">{{ item.label }}</span>
+          <span v-else class="nav-disabled" :title="`Not implemented (${item.label})`">{{ item.label }}</span>
         </template>
       </nav>
       <div class="app-auth">
-        <NuxtLink to="/viewer" class="viewer-link" target="_blank">观看页</NuxtLink>
+        <NuxtLink to="/viewer" class="viewer-link" target="_blank">Viewer</NuxtLink>
         <span v-if="user" class="app-user">{{ user.email }}</span>
-        <button v-if="user" class="ghost" @click="logout">登出</button>
+        <button v-if="user" class="ghost" @click="logout">Sign out</button>
       </div>
     </header>
     <main class="app-main">

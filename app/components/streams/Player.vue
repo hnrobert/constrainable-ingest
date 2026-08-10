@@ -23,7 +23,7 @@ async function resolveUrls(): Promise<void> {
     })
   } catch (e: any) {
     status.value = 'error'
-    errorMsg.value = e?.data?.statusMessage || e?.message || '无法获取播放地址'
+    errorMsg.value = e?.data?.statusMessage || e?.message || 'Unable to fetch playback URL'
   }
 }
 
@@ -64,7 +64,7 @@ async function startFlv(): Promise<void> {
     )
     mpegPlayer.on(mpegts.Events.ERROR, (errType, errDetail) => {
       status.value = 'error'
-      errorMsg.value = `FLV 错误：${errType} ${errDetail ?? ''}`
+      errorMsg.value = `FLV error: ${errType} ${errDetail ?? ''}`
     })
     mpegPlayer.attachMediaElement(videoEl.value!)
     mpegPlayer.load()
@@ -72,7 +72,7 @@ async function startFlv(): Promise<void> {
     status.value = 'playing'
   } catch (e: any) {
     status.value = 'error'
-    errorMsg.value = 'FLV 播放失败：' + (e?.message ?? String(e))
+    errorMsg.value = 'FLV playback failed: ' + (e?.message ?? String(e))
   }
 }
 
@@ -102,7 +102,7 @@ async function startWebrtc(): Promise<void> {
     status.value = 'playing'
   } catch (e: any) {
     status.value = 'error'
-    errorMsg.value = 'WebRTC 失败，可切回 FLV：' + (e?.message ?? String(e))
+    errorMsg.value = 'WebRTC failed, switch back to FLV: ' + (e?.message ?? String(e))
   }
 }
 
@@ -138,7 +138,7 @@ watch(
         danger: status === 'error',
         muted: status === 'idle',
       }">
-        {{ status === 'playing' ? '播放中' : status === 'loading' ? '加载中…' : status === 'error' ? '错误' : '空闲' }}
+        {{ status === 'playing' ? 'Playing' : status === 'loading' ? 'Loading…' : status === 'error' ? 'Error' : 'Idle' }}
       </span>
       <div class="modes">
         <button :class="{ primary: mode === 'flv' }" @click="switchMode('flv')">FLV</button>
@@ -147,7 +147,7 @@ watch(
     </div>
     <video ref="videoEl" class="video" autoplay muted playsinline controls />
     <p v-if="errorMsg" class="badge danger">{{ errorMsg }}</p>
-    <p class="muted small">浏览器直连 SRS 播放。若 WebRTC 不通，请使用 FLV。</p>
+    <p class="muted small">The browser connects directly to SRS for playback. If WebRTC doesn't work, use FLV.</p>
   </div>
 </template>
 

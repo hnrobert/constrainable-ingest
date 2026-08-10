@@ -70,17 +70,17 @@ This is the deploy-time verification the code can't self-test (needs OBS + a
 camera/LAN). With `docker compose up` running:
 
 1. **Create an event + roster + keys.** Log in (`http://<PUBLIC_HOST>:3000`),
-   go to **赛事**, create an event, paste a CSV roster
-   (`学号,姓名[,邮箱][,座位]`), and **批量生成** keys. Copy a student's OBS
+   go to **Events**, create an event, paste a CSV roster
+   (`student_id,name[,email][,seat]`), and **bulk-generate** keys. Copy a student's OBS
    config: server `rtmp://<PUBLIC_HOST>:1935/live`, key `<streamName>?token=…`.
-2. **Push from OBS** to that RTMP URL. The **实时** tab should show a session +
+2. **Push from OBS** to that RTMP URL. The **Realtime** tab should show a session +
    live metrics within seconds (Socket.IO).
 3. **Exceed a limit** (e.g. raise resolution past the configured max). The panel
    shows a violation toast, SRS kicks the stream, and the non-compliant stream is
    **not** archived.
 4. **Stop OBS.** A compliant session produces an MP4 under `records/<date>/`,
-   appears in **录像**, and plays inline (HTTP Range) / downloads.
-5. **Hot-reload limits** in **配置** — new pushes use the new thresholds without
+   appears in **Recordings**, and plays inline (HTTP Range) / downloads.
+5. **Hot-reload limits** in **Config** — new pushes use the new thresholds without
    a restart.
 6. **Reject off-roster** — push with an unknown/revoked token: `on_publish`
    returns `200` body `"1"` and SRS drops the stream (audited).

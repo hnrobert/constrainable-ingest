@@ -23,64 +23,64 @@ interface Section {
 
 const sections: Section[] = [
   {
-    title: '分辨率 / 帧率 / 码率 限制',
+    title: 'Resolution / Framerate / Bitrate Limits',
     fields: [
-      { path: 'limits.maxWidth', label: '最大宽度 (px)', kind: 'number', hint: '0 = 不限制' },
-      { path: 'limits.maxHeight', label: '最大高度 (px)', kind: 'number', hint: '0 = 不限制' },
-      { path: 'limits.maxFps', label: '最大帧率 (fps)', kind: 'number', hint: '0 = 不限制' },
-      { path: 'limits.maxBitrateKbps', label: '最大码率 (kbps)', kind: 'number', hint: '0 = 不限制' },
+      { path: 'limits.maxWidth', label: 'Max width (px)', kind: 'number', hint: '0 = no limit' },
+      { path: 'limits.maxHeight', label: 'Max height (px)', kind: 'number', hint: '0 = no limit' },
+      { path: 'limits.maxFps', label: 'Max framerate (fps)', kind: 'number', hint: '0 = no limit' },
+      { path: 'limits.maxBitrateKbps', label: 'Max bitrate (kbps)', kind: 'number', hint: '0 = no limit' },
     ],
   },
   {
-    title: '违规处置',
+    title: 'Violation Handling',
     fields: [
       {
         path: 'enforce',
-        label: '执行方式',
+        label: 'Enforcement mode',
         kind: 'select',
         options: [
-          { value: 'kick', label: '踢流 (kick) — 超限即断开' },
-          { value: 'flag', label: '仅标记 (flag) — 告警不断流' },
+          { value: 'kick', label: 'Kick (kick) — disconnect on limit breach' },
+          { value: 'flag', label: 'Flag only (flag) — alert without disconnecting' },
         ],
       },
     ],
   },
   {
-    title: '探测 (ffprobe)',
+    title: 'Probe (ffprobe)',
     fields: [
-      { path: 'probe.waitMs', label: '首发前等待 (ms)', kind: 'number' },
-      { path: 'probe.retries', label: '失败重试次数', kind: 'number' },
-      { path: 'probe.retryIntervalMs', label: '重试间隔 (ms)', kind: 'number' },
-      { path: 'probe.timeoutMs', label: '单次超时 (ms)', kind: 'number' },
-      { path: 'probe.pollIntervalMs', label: '轮询间隔 (ms)', kind: 'number', hint: '活跃会话每次探测的间隔' },
+      { path: 'probe.waitMs', label: 'Wait before first probe (ms)', kind: 'number' },
+      { path: 'probe.retries', label: 'Retry count on failure', kind: 'number' },
+      { path: 'probe.retryIntervalMs', label: 'Retry interval (ms)', kind: 'number' },
+      { path: 'probe.timeoutMs', label: 'Single probe timeout (ms)', kind: 'number' },
+      { path: 'probe.pollIntervalMs', label: 'Polling interval (ms)', kind: 'number', hint: 'Interval between probes for active sessions' },
     ],
   },
   {
-    title: '并发',
+    title: 'Concurrency',
     fields: [
-      { path: 'concurrency.probeMax', label: 'ffprobe 最大并发', kind: 'number' },
+      { path: 'concurrency.probeMax', label: 'ffprobe max concurrency', kind: 'number' },
     ],
   },
   {
-    title: '录制',
+    title: 'Recording',
     fields: [
-      { path: 'record.enabled', label: '启用录制', kind: 'bool' },
-      { path: 'record.maxConcurrency', label: 'ffmpeg 录制最大并发', kind: 'number' },
-      { path: 'record.retentionDays', label: '录像保留天数', kind: 'number', hint: '0 = 永久保留；下次清理生效' },
-      { path: 'record.remuxTimeoutMs', label: 'FLV→MP4 转封装超时 (ms)', kind: 'number' },
+      { path: 'record.enabled', label: 'Enable recording', kind: 'bool' },
+      { path: 'record.maxConcurrency', label: 'ffmpeg recording max concurrency', kind: 'number' },
+      { path: 'record.retentionDays', label: 'Recording retention days', kind: 'number', hint: '0 = retain forever; takes effect on next cleanup' },
+      { path: 'record.remuxTimeoutMs', label: 'FLV→MP4 remux timeout (ms)', kind: 'number' },
     ],
   },
   {
-    title: '推流准入',
+    title: 'Publish Admission',
     fields: [
-      { path: 'access.rejectUnknownPublishers', label: '拒绝未登记的推流', kind: 'bool', hint: '关闭则允许任意 streamName 推流' },
+      { path: 'access.rejectUnknownPublishers', label: 'Reject unregistered publishes', kind: 'bool', hint: 'Off allows any streamName to publish' },
     ],
   },
   {
-    title: 'SRS 连接（高级）',
+    title: 'SRS Connection (Advanced)',
     fields: [
       { path: 'srs.apiBase', label: 'SRS HTTP API', kind: 'text' },
-      { path: 'srs.rtmpHost', label: 'SRS RTMP 主机', kind: 'text', hint: '服务端拉流地址（容器内主机名）' },
+      { path: 'srs.rtmpHost', label: 'SRS RTMP host', kind: 'text', hint: 'Server pull address (in-container hostname)' },
     ],
   },
 ]
@@ -129,16 +129,16 @@ async function save(): Promise<void> {
     const updated = await $fetch<AppConfig>('/api/config', { method: 'PATCH', body: form.value })
     data.value = updated
     form.value = structuredClone(updated)
-    toast.success('配置已保存并热重载')
+    toast.success('Configuration saved and hot-reloaded')
   } catch (e: any) {
-    toast.error('保存失败：' + (e?.data?.statusMessage || e?.message || '未知错误'))
+    toast.error('Save failed: ' + (e?.data?.statusMessage || e?.message || 'Unknown error'))
   } finally {
     saving.value = false
   }
 }
 function reset(): void {
   if (data.value) form.value = structuredClone(data.value)
-  toast.info('已还原为服务器配置')
+  toast.info('Reverted to server configuration')
 }
 </script>
 
@@ -146,14 +146,14 @@ function reset(): void {
   <div class="stack">
     <div class="between">
       <div>
-        <h1>运行配置</h1>
-        <p class="muted">保存后立即热重载：新会话即用新值，活跃会话下一轮探测生效。</p>
+        <h1>Runtime Configuration</h1>
+        <p class="muted">Hot-reloads on save: new sessions use the new values immediately; active sessions pick them up on the next probe.</p>
       </div>
       <div class="row">
-        <span v-if="dirty" class="badge warn">有未保存更改</span>
-        <button :disabled="!dirty || saving" @click="reset">还原</button>
+        <span v-if="dirty" class="badge warn">Unsaved changes</span>
+        <button :disabled="!dirty || saving" @click="reset">Revert</button>
         <button class="primary" :disabled="!dirty || saving" @click="save">
-          {{ saving ? '保存中…' : '保存并热重载' }}
+          {{ saving ? 'Saving…' : 'Save & hot-reload' }}
         </button>
       </div>
     </div>
@@ -197,24 +197,24 @@ function reset(): void {
       </section>
 
       <section class="card">
-        <h2>注册邮箱限制</h2>
+        <h2>Registration Email Restrictions</h2>
         <div class="fields">
           <label class="field field-bool">
             <input
               type="checkbox"
               v-model="form.registration.emailWhitelist.enabled"
             />
-            <span>启用邮箱白名单 <small class="muted">— 开启后，仅匹配下列通配符的邮箱可注册；留空则允许全部</small></span>
+            <span>Enable email whitelist <small class="muted">— When enabled, only emails matching the wildcards below may register; leave empty to allow all</small></span>
           </label>
           <label class="field">
-            <span class="field-label">允许的邮箱通配符（每行一个）</span>
+            <span class="field-label">Allowed email wildcards (one per line)</span>
             <textarea v-model="whitelistText" rows="4" placeholder="*@nottingham.edu.cn&#10;*@*.nottingham.edu.cn"></textarea>
-            <small class="muted field-hint">picomatch 通配符，例如 <code>*@nottingham.edu.cn</code>。首位管理员注册不受此限制。</small>
+            <small class="muted field-hint">picomatch wildcards, e.g. <code>*@nottingham.edu.cn</code>. The first admin registration is exempt.</small>
           </label>
           <label class="field">
-            <span class="field-label">禁用的邮箱特征（每行一个）</span>
+            <span class="field-label">Disallowed email patterns (one per line)</span>
             <textarea v-model="disallowedText" rows="3" placeholder="student&#10;staff"></textarea>
-            <small class="muted field-hint">出现这些词（不区分大小写）的邮箱一律拒绝，如机构邮件组 <code>student</code> / <code>staff</code>。</small>
+            <small class="muted field-hint">Emails containing these words (case-insensitive) are always rejected, e.g. institutional mailing lists <code>student</code> / <code>staff</code>.</small>
           </label>
         </div>
       </section>

@@ -196,13 +196,13 @@ export async function rotatePublishToken(
     if (c.length < PUBLISH_TOKEN_MIN || c.length > PUBLISH_TOKEN_MAX) {
       throw createError({
         statusCode: 400,
-        statusMessage: `令牌长度需为 ${PUBLISH_TOKEN_MIN}–${PUBLISH_TOKEN_MAX} 位`,
+        statusMessage: `Token length must be ${PUBLISH_TOKEN_MIN}–${PUBLISH_TOKEN_MAX} characters`,
       })
     }
     if (!PUBLISH_TOKEN_RE.test(c)) {
       throw createError({
         statusCode: 400,
-        statusMessage: '令牌仅可包含字母、数字及 . _ - ~',
+        statusMessage: 'Token may only contain letters, digits, and . _ - ~',
       })
     }
     token = c

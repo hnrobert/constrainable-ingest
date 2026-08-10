@@ -16,14 +16,14 @@ function fmtSize(bytes: number): string {
 }
 
 async function remove(): Promise<void> {
-  if (!confirm(`删除录像「${props.recording.streamName}」？文件也会被删除。`)) return
+  if (!confirm(`Delete recording "${props.recording.streamName}"? The file will also be deleted.`)) return
   removing.value = true
   try {
     await $fetch(`/api/recordings/${props.recording.id}`, { method: 'DELETE' })
-    toast.success('已删除录像')
+    toast.success('Recording deleted')
     emit('deleted', props.recording.id)
   } catch (e: any) {
-    toast.error('删除失败：' + (e?.data?.statusMessage || e?.message || ''))
+    toast.error('Delete failed: ' + (e?.data?.statusMessage || e?.message || ''))
   } finally {
     removing.value = false
   }
@@ -40,13 +40,13 @@ async function remove(): Promise<void> {
         <div class="muted small">
           {{ fmtSize(recording.sizeBytes) }}
           <span v-if="recording.width && recording.height"> · {{ recording.width }}×{{ recording.height }}</span>
-          · {{ new Date(recording.startedAt).toLocaleString('zh-CN', { hour12: false }) }}
+          · {{ new Date(recording.startedAt).toLocaleString('en-US', { hour12: false }) }}
         </div>
       </div>
       <div class="row">
-        <a class="btn-link" :href="downloadUrl" target="_blank">下载</a>
+        <a class="btn-link" :href="downloadUrl" target="_blank">Download</a>
         <button class="danger" :disabled="removing" @click="remove">
-          {{ removing ? '删除中…' : '删除' }}
+          {{ removing ? 'Deleting…' : 'Delete' }}
         </button>
       </div>
     </div>

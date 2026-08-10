@@ -33,18 +33,18 @@ function fromAddress(c: MailConfig): string {
 }
 
 function validate(c: MailConfig, input: SendMailInput): void {
-  if (!EMAIL_RE.test(input.to)) throw new Error('收件人邮箱格式无效')
+  if (!EMAIL_RE.test(input.to)) throw new Error('Invalid recipient email format')
   if (input.to.length > c.maxLenRecipientEmail) {
-    throw new Error(`收件人邮箱过长（上限 ${c.maxLenRecipientEmail}）`)
+    throw new Error(`Recipient email too long (max ${c.maxLenRecipientEmail})`)
   }
   if (input.subject.length > c.maxLenSubject) {
-    throw new Error(`主题过长（上限 ${c.maxLenSubject}）`)
+    throw new Error(`Subject too long (max ${c.maxLenSubject})`)
   }
 }
 
 /** Send via HTTP POST webhook (provider 'post'). */
 async function sendViaPost(c: MailConfig, input: SendMailInput): Promise<string> {
-  if (!c.postUrl) throw new Error('未配置 Webhook 地址')
+  if (!c.postUrl) throw new Error('Webhook URL not configured')
   validate(c, input)
   const payload =
     c.postSchema === 'powerautomate'
@@ -55,7 +55,7 @@ async function sendViaPost(c: MailConfig, input: SendMailInput): Promise<string>
   const res = await fetch(c.postUrl, { method: 'POST', headers, body: JSON.stringify(payload) })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    throw new Error(`Webhook 返回 ${res.status}${detail ? ': ' + detail.slice(0, 200) : ''}`)
+    throw new Error(`Webhook returned ${res.status}${detail ? ': ' + detail.slice(0, 200) : ''}`)
   }
   return `<post-${randomBytes(8).toString('hex')}@webhook>`
 }
@@ -63,7 +63,7 @@ async function sendViaPost(c: MailConfig, input: SendMailInput): Promise<string>
 /** Send using an explicit config. Returns the message id. */
 export async function sendMailWithConfig(c: MailConfig, input: SendMailInput): Promise<string> {
   if (c.provider === 'post') return sendViaPost(c, input)
-  if (!c.host) throw new Error('未配置 SMTP 服务器')
+  if (!c.host) throw new Error('SMTP server not configured')
   validate(c, input)
   const transporter = nodemailer.createTransport({
     host: c.host,

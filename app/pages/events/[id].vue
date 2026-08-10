@@ -53,9 +53,9 @@ async function saveSettings(): Promise<void> {
     event.value = updated
     settings.value = structuredClone(updated)
     viewerPassphrase.value = ''
-    toast.success('赛事已更新')
+    toast.success('Event updated')
   } catch (e: any) {
-    toast.error('保存失败：' + (e?.data?.statusMessage || e?.message || ''))
+    toast.error('Save failed: ' + (e?.data?.statusMessage || e?.message || ''))
   }
 }
 
@@ -65,7 +65,7 @@ const importing = ref(false)
 function parseCsv(text: string): { studentNumber: string; name: string; email?: string; seatLabel?: string }[] {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
   let rows = lines.map((l) => l.split(/[,\t;]/).map((c) => c.trim()))
-  if (rows.length && /姓名|学号|name|student/i.test(rows[0]?.join(' ') ?? '')) rows = rows.slice(1)
+  if (rows.length && /name|student/i.test(rows[0]?.join(' ') ?? '')) rows = rows.slice(1)
   return rows
     .map((r) => ({
       studentNumber: r[0] ?? '',
@@ -78,7 +78,7 @@ function parseCsv(text: string): { studentNumber: string; name: string; email?: 
 async function importRoster(): Promise<void> {
   const students = parseCsv(csvText.value)
   if (students.length === 0) {
-    toast.error('未解析到有效行（学号,姓名）')
+    toast.error('No valid rows parsed (student ID, name)')
     return
   }
   importing.value = true
@@ -87,23 +87,23 @@ async function importRoster(): Promise<void> {
       method: 'POST',
       body: { students },
     })
-    toast.success(`导入完成：新增 ${r.created}，更新 ${r.updated}`)
+    toast.success(`Import complete: ${r.created} new, ${r.updated} updated`)
     csvText.value = ''
     await refreshRoster()
   } catch (e: any) {
-    toast.error('导入失败：' + (e?.data?.statusMessage || e?.message || ''))
+    toast.error('Import failed: ' + (e?.data?.statusMessage || e?.message || ''))
   } finally {
     importing.value = false
   }
 }
 async function removeEntry(enrollmentId: number): Promise<void> {
-  if (!confirm('从名单移除该学生？（其密钥将被吊销）')) return
+  if (!confirm('Remove this student from the roster? (Their stream key will be revoked)')) return
   try {
     await $fetch(`/api/events/${id}/roster/${enrollmentId}`, { method: 'DELETE' })
     await Promise.all([refreshRoster(), refreshKeys()])
-    toast.info('已移除')
+    toast.info('Removed')
   } catch (e: any) {
-    toast.error('移除失败：' + (e?.data?.statusMessage || e?.message || ''))
+    toast.error('Remove failed: ' + (e?.data?.statusMessage || e?.message || ''))
   }
 }
 
@@ -121,7 +121,7 @@ const customTokenValid = computed(() => {
   return t.length >= 8 && t.length <= 128 && TOKEN_RE.test(t)
 })
 async function rotatePublishToken(): Promise<void> {
-  if (event.value?.publishTokenPreview && !confirm('重新生成将使旧推流令牌立即失效，确定？')) return
+  if (event.value?.publishTokenPreview && !confirm('Regenerating will invalidate the old publish token immediately. Continue?')) return
   rotatingToken.value = true
   try {
     const r = await $fetch<{ token: string; preview: string; isCustom: boolean }>(
@@ -131,16 +131,16 @@ async function rotatePublishToken(): Promise<void> {
     freshPublishToken.value = r
     await refreshEvent()
     if (event.value) settings.value = structuredClone(toRaw(event.value))
-    toast.success('推流令牌已生成（请立即复制，仅显示一次）')
+    toast.success('Publish token generated (copy it now, shown only once)')
   } catch (e: any) {
-    toast.error('生成失败：' + (e?.data?.statusMessage || e?.message || ''))
+    toast.error('Generation failed: ' + (e?.data?.statusMessage || e?.message || ''))
   } finally {
     rotatingToken.value = false
   }
 }
 async function setCustomPublishToken(): Promise<void> {
   if (!customTokenValid.value) return
-  if (event.value?.publishTokenPreview && !confirm('设置自定义令牌将使旧推流令牌立即失效，确定？')) return
+  if (event.value?.publishTokenPreview && !confirm('Setting a custom token will invalidate the old publish token immediately. Continue?')) return
   rotatingToken.value = true
   try {
     const r = await $fetch<{ token: string; preview: string; isCustom: boolean }>(
@@ -151,29 +151,29 @@ async function setCustomPublishToken(): Promise<void> {
     customToken.value = ''
     await refreshEvent()
     if (event.value) settings.value = structuredClone(toRaw(event.value))
-    toast.success('自定义推流令牌已设置')
+    toast.success('Custom publish token set')
   } catch (e: any) {
-    toast.error('设置失败：' + (e?.data?.statusMessage || e?.message || ''))
+    toast.error('Set failed: ' + (e?.data?.statusMessage || e?.message || ''))
   } finally {
     rotatingToken.value = false
   }
 }
 async function clearPublishToken(): Promise<void> {
-  if (!confirm('清除推流令牌？使用该令牌的推流将被拒绝。')) return
+  if (!confirm('Clear publish token? Publishes using this token will be rejected.')) return
   try {
     await $fetch(`/api/events/${id}/publish-token`, { method: 'DELETE' })
     freshPublishToken.value = null
     await refreshEvent()
-    toast.info('已清除')
+    toast.info('Cleared')
   } catch (e: any) {
-    toast.error('清除失败：' + (e?.data?.statusMessage || e?.message || ''))
+    toast.error('Clear failed: ' + (e?.data?.statusMessage || e?.message || ''))
   }
 }
 
 const generating = ref(false)
 async function generateOne(): Promise<void> {
   if (!genForm.studentNumber.trim() || !genForm.name.trim()) {
-    toast.error('请填写学号和姓名')
+    toast.error('Please fill in student ID and name')
     return
   }
   generating.value = true
@@ -186,9 +186,9 @@ async function generateOne(): Promise<void> {
     genForm.seatLabel = ''
     genForm.streamName = ''
     await Promise.all([refreshRoster(), refreshKeys()])
-    toast.success('密钥已生成（请立即复制，仅显示一次）')
+    toast.success('Stream key generated (copy it now, shown only once)')
   } catch (e: any) {
-    toast.error('生成失败：' + (e?.data?.statusMessage || e?.message || ''))
+    toast.error('Generation failed: ' + (e?.data?.statusMessage || e?.message || ''))
   } finally {
     generating.value = false
   }
@@ -199,39 +199,39 @@ async function generateAll(): Promise<void> {
     const ks = await $fetch<GeneratedKey[]>(`/api/events/${id}/keys/bulk`, { method: 'POST' })
     freshKeys.value = ks
     await Promise.all([refreshRoster(), refreshKeys()])
-    toast.success(ks.length ? `已为 ${ks.length} 名学生生成密钥` : '所有学生均已持有密钥')
+    toast.success(ks.length ? `Stream keys generated for ${ks.length} students` : 'All students already have stream keys')
   } catch (e: any) {
-    toast.error('生成失败：' + (e?.data?.statusMessage || e?.message || ''))
+    toast.error('Generation failed: ' + (e?.data?.statusMessage || e?.message || ''))
   } finally {
     generating.value = false
   }
 }
 async function revokeKey(keyId: number): Promise<void> {
-  if (!confirm('吊销该密钥？学生将无法推流，需重新生成。')) return
+  if (!confirm('Revoke this stream key? The student will not be able to publish until it is regenerated.')) return
   try {
     await $fetch(`/api/events/${id}/keys/${keyId}`, { method: 'DELETE' })
     await refreshKeys()
-    toast.info('已吊销')
+    toast.info('Revoked')
   } catch (e: any) {
-    toast.error('吊销失败：' + (e?.data?.statusMessage || e?.message || ''))
+    toast.error('Revoke failed: ' + (e?.data?.statusMessage || e?.message || ''))
   }
 }
 
-async function copy(text: string, label = '已复制'): Promise<void> {
+async function copy(text: string, label = 'Copied'): Promise<void> {
   try {
     await navigator.clipboard.writeText(text)
     toast.success(label)
   } catch {
-    toast.error('复制失败，请手动复制')
+    toast.error('Copy failed, please copy manually')
   }
 }
 
 const statusOptions: { value: EventStatus; label: string }[] = [
-  { value: 'draft', label: '草稿' },
-  { value: 'scheduled', label: '待开始' },
-  { value: 'live', label: '进行中' },
-  { value: 'ended', label: '已结束' },
-  { value: 'archived', label: '已归档' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'live', label: 'Live' },
+  { value: 'ended', label: 'Ended' },
+  { value: 'archived', label: 'Archived' },
 ]
 </script>
 
@@ -239,7 +239,7 @@ const statusOptions: { value: EventStatus; label: string }[] = [
   <div v-if="event" class="stack">
     <div class="between">
       <div>
-        <NuxtLink to="/events" class="muted">← 返回赛事列表</NuxtLink>
+        <NuxtLink to="/events" class="muted">← Back to events</NuxtLink>
         <h1>{{ event.name }}</h1>
         <p class="muted">slug: {{ event.slug }}</p>
       </div>
@@ -248,160 +248,160 @@ const statusOptions: { value: EventStatus; label: string }[] = [
     <!-- freshly generated keys (plaintext shown once) -->
     <section v-if="freshKeys.length" class="card fresh">
       <div class="between">
-        <h2>新生成的密钥（仅显示一次，请立即复制）</h2>
-        <button @click="freshKeys = []">关闭</button>
+        <h2>Newly generated stream keys (shown only once, copy them now)</h2>
+        <button @click="freshKeys = []">Close</button>
       </div>
       <div v-for="k in freshKeys" :key="k.id" class="fresh-row">
-        <div><strong>{{ k.studentLabel }}</strong>（{{ k.studentNumber }}）</div>
-        <div class="kv"><span>OBS 服务器</span><code>{{ obs.server.value }}</code>
-          <button @click="copy(obs.server.value, '已复制服务器地址')">复制</button></div>
-        <div class="kv"><span>推流密钥</span><code>{{ obs.streamKey(k.streamName, k.token) }}</code>
-          <button @click="copy(obs.streamKey(k.streamName, k.token), '已复制推流密钥')">复制</button></div>
+        <div><strong>{{ k.studentLabel }}</strong> ({{ k.studentNumber }})</div>
+        <div class="kv"><span>OBS server</span><code>{{ obs.server.value }}</code>
+          <button @click="copy(obs.server.value, 'Copied server address')">Copy</button></div>
+        <div class="kv"><span>Stream key</span><code>{{ obs.streamKey(k.streamName, k.token) }}</code>
+          <button @click="copy(obs.streamKey(k.streamName, k.token), 'Copied stream key')">Copy</button></div>
       </div>
     </section>
 
     <!-- settings -->
     <section class="card">
-      <h2>赛事设置</h2>
+      <h2>Event settings</h2>
       <div v-if="settings" class="form-grid">
-        <label class="field"><span class="field-label">名称</span><input v-model="settings.name" /></label>
+        <label class="field"><span class="field-label">Name</span><input v-model="settings.name" /></label>
         <label class="field"><span class="field-label">slug</span><input v-model="settings.slug" /></label>
-        <label class="field full"><span class="field-label">描述</span><input v-model="settings.description" /></label>
-        <label class="field"><span class="field-label">状态</span>
+        <label class="field full"><span class="field-label">Description</span><input v-model="settings.description" /></label>
+        <label class="field"><span class="field-label">Status</span>
           <select v-model="settings.status">
             <option v-for="o in statusOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
           </select>
         </label>
-        <label class="field"><span class="field-label">观看</span>
+        <label class="field"><span class="field-label">Viewer access</span>
           <select v-model="settings.viewerAccess">
-            <option value="public">公开</option>
-            <option value="passphrase">口令</option>
+            <option value="public">Public</option>
+            <option value="passphrase">Passphrase</option>
           </select>
         </label>
         <label class="field-bool">
           <input type="checkbox" v-model="settings.recordEnabled" />
-          <span>启用录制</span>
+          <span>Enable recording</span>
         </label>
         <label v-if="settings.viewerAccess === 'passphrase'" class="field full">
-          <span class="field-label">观看口令{{ event.hasViewerPassphrase ? '（已设置，留空保持不变）' : '' }}</span>
-          <input v-model="viewerPassphrase" type="password" placeholder="设置观看口令" />
+          <span class="field-label">Viewer passphrase{{ event.hasViewerPassphrase ? ' (set, leave blank to keep unchanged)' : '' }}</span>
+          <input v-model="viewerPassphrase" type="password" placeholder="Set viewer passphrase" />
         </label>
       </div>
       <div class="row right">
-        <span v-if="settingsDirty" class="badge warn">有未保存更改</span>
-        <button class="primary" :disabled="!settingsDirty" @click="saveSettings">保存</button>
+        <span v-if="settingsDirty" class="badge warn">Unsaved changes</span>
+        <button class="primary" :disabled="!settingsDirty" @click="saveSettings">Save</button>
       </div>
     </section>
 
     <!-- per-event publish token -->
     <section class="card">
       <div class="between">
-        <h2>赛事推流令牌</h2>
-        <span v-if="event.publishTokenPreview" class="badge ok">已设置 <code class="mono">{{ event.publishTokenPreview }}…</code></span>
-        <span v-else class="badge muted">未设置</span>
+        <h2>Event publish token</h2>
+        <span v-if="event.publishTokenPreview" class="badge ok">Set <code class="mono">{{ event.publishTokenPreview }}…</code></span>
+        <span v-else class="badge muted">Not set</span>
       </div>
       <p class="muted small">
-        每个赛事一个推流令牌，发给本赛事全体推流者。OBS 推流密钥为 <code class="mono">&lt;流名&gt;?token=&lt;令牌&gt;</code>，
-        仅在赛事时间窗口内有效（与按学生生成的密钥二选一即可）。
+        One publish token per event, shared with all publishers for this event. The OBS stream key is <code class="mono">&lt;stream-name&gt;?token=&lt;token&gt;</code>,
+        valid only within the event time window (use either this or per-student stream keys).
       </p>
 
       <div v-if="freshPublishToken" class="fresh-token">
-        <strong>{{ freshPublishToken.isCustom ? '已应用令牌' : '新令牌（仅显示一次，请立即复制）' }}</strong>
-        <div class="kv"><span>令牌</span><code>{{ freshPublishToken.token }}</code>
-          <button @click="copy(freshPublishToken.token, '已复制令牌')">复制</button></div>
-        <div class="kv"><span>OBS 服务器</span><code>{{ obs.server.value }}</code>
-          <button @click="copy(obs.server.value, '已复制服务器地址')">复制</button></div>
-        <div class="kv"><span>推流密钥示例</span>
-          <code>{{ obs.streamKey('流名', freshPublishToken.token) }}</code></div>
+        <strong>{{ freshPublishToken.isCustom ? 'Token applied' : 'New token (shown only once, copy it now)' }}</strong>
+        <div class="kv"><span>Token</span><code>{{ freshPublishToken.token }}</code>
+          <button @click="copy(freshPublishToken.token, 'Copied token')">Copy</button></div>
+        <div class="kv"><span>OBS server</span><code>{{ obs.server.value }}</code>
+          <button @click="copy(obs.server.value, 'Copied server address')">Copy</button></div>
+        <div class="kv"><span>Stream key example</span>
+          <code>{{ obs.streamKey('stream-name', freshPublishToken.token) }}</code></div>
       </div>
 
       <div class="row right">
-        <button v-if="event.publishTokenPreview" :disabled="rotatingToken" @click="clearPublishToken">清除</button>
+        <button v-if="event.publishTokenPreview" :disabled="rotatingToken" @click="clearPublishToken">Clear</button>
         <button class="primary" :disabled="rotatingToken" @click="rotatePublishToken">
-          {{ rotatingToken ? '生成中…' : event.publishTokenPreview ? '重新生成' : '生成随机令牌' }}
+          {{ rotatingToken ? 'Generating…' : event.publishTokenPreview ? 'Regenerate' : 'Generate random token' }}
         </button>
       </div>
 
       <div class="row custom-token">
         <input
           v-model="customToken"
-          placeholder="或自定义令牌（8–128 位，字母数字及 . _ - ~）"
+          placeholder="Or custom token (8–128 chars, alphanumeric and . _ - ~)"
           @keyup.enter="setCustomPublishToken"
         />
         <button
           class="primary"
           :disabled="rotatingToken || !customTokenValid"
           @click="setCustomPublishToken"
-        >应用自定义</button>
+        >Apply custom</button>
       </div>
       <p v-if="customToken && !customTokenValid" class="muted small warn-text">
-        令牌需 8–128 位，仅含字母、数字及 <code class="mono">. _ - ~</code>。
+        Token must be 8–128 chars, containing only letters, digits, and <code class="mono">. _ - ~</code>.
       </p>
     </section>
 
     <!-- roster -->
     <section class="card">
       <div class="between">
-        <h2>名单（{{ roster?.length ?? 0 }}）</h2>
+        <h2>Roster ({{ roster?.length ?? 0 }})</h2>
       </div>
-      <p class="muted small">粘贴 CSV：每行 <code>学号,姓名[,邮箱][,座位]</code>。首行若为表头会自动跳过。</p>
-      <textarea v-model="csvText" rows="4" placeholder="2024001,张三,zs@x.edu,A1&#10;2024002,李四,,B2" />
+      <p class="muted small">Paste CSV: one row per line as <code>student_id,name[,email][,seat]</code>. A header row is skipped automatically.</p>
+      <textarea v-model="csvText" rows="4" placeholder="2024001,Alice,alice@x.edu,A1&#10;2024002,Bob,,B2" />
       <div class="row right">
-        <button :disabled="importing" @click="importRoster">{{ importing ? '导入中…' : '导入' }}</button>
+        <button :disabled="importing" @click="importRoster">{{ importing ? 'Importing…' : 'Import' }}</button>
       </div>
       <table v-if="roster && roster.length">
-        <thead><tr><th>学号</th><th>姓名</th><th>座位</th><th>密钥</th><th></th></tr></thead>
+        <thead><tr><th>Student ID</th><th>Name</th><th>Seat</th><th>Stream key</th><th></th></tr></thead>
         <tbody>
           <tr v-for="r in roster" :key="r.enrollmentId">
             <td>{{ r.studentNumber }}</td>
             <td>{{ r.name }}</td>
             <td class="muted">{{ r.seatLabel ?? '—' }}</td>
-            <td><span class="badge" :class="r.hasKey ? 'ok' : 'muted'">{{ r.hasKey ? '已生成' : '无' }}</span></td>
-            <td><button class="danger" @click="removeEntry(r.enrollmentId)">移除</button></td>
+            <td><span class="badge" :class="r.hasKey ? 'ok' : 'muted'">{{ r.hasKey ? 'Generated' : 'None' }}</span></td>
+            <td><button class="danger" @click="removeEntry(r.enrollmentId)">Remove</button></td>
           </tr>
         </tbody>
       </table>
-      <div v-else class="muted empty">暂无名单。</div>
+      <div v-else class="muted empty">No roster yet.</div>
     </section>
 
     <!-- keys -->
     <section class="card">
       <div class="between">
-        <h2>推流密钥（{{ keys?.length ?? 0 }}）</h2>
-        <button class="primary" :disabled="generating" @click="generateAll">为未生成学生批量生成</button>
+        <h2>Stream keys ({{ keys?.length ?? 0 }})</h2>
+        <button class="primary" :disabled="generating" @click="generateAll">Bulk generate for students without keys</button>
       </div>
 
       <details class="gen-one">
-        <summary>生成单个密钥</summary>
+        <summary>Generate single key</summary>
         <div class="form-grid">
-          <label class="field"><span class="field-label">学号 *</span><input v-model="genForm.studentNumber" /></label>
-          <label class="field"><span class="field-label">姓名 *</span><input v-model="genForm.name" /></label>
-          <label class="field"><span class="field-label">邮箱</span><input v-model="genForm.email" /></label>
-          <label class="field"><span class="field-label">座位</span><input v-model="genForm.seatLabel" /></label>
-          <label class="field full"><span class="field-label">自定义流名（留空用学号）</span><input v-model="genForm.streamName" /></label>
+          <label class="field"><span class="field-label">Student ID *</span><input v-model="genForm.studentNumber" /></label>
+          <label class="field"><span class="field-label">Name *</span><input v-model="genForm.name" /></label>
+          <label class="field"><span class="field-label">Email</span><input v-model="genForm.email" /></label>
+          <label class="field"><span class="field-label">Seat</span><input v-model="genForm.seatLabel" /></label>
+          <label class="field full"><span class="field-label">Custom stream name (leave blank to use student ID)</span><input v-model="genForm.streamName" /></label>
         </div>
         <div class="row right">
-          <button class="primary" :disabled="generating" @click="generateOne">生成</button>
+          <button class="primary" :disabled="generating" @click="generateOne">Generate</button>
         </div>
       </details>
 
       <table v-if="keys && keys.length">
-        <thead><tr><th>流名</th><th>学生</th><th>预览</th><th>状态</th><th>最近使用</th><th></th></tr></thead>
+        <thead><tr><th>Stream name</th><th>Student</th><th>Preview</th><th>Status</th><th>Last used</th><th></th></tr></thead>
         <tbody>
           <tr v-for="k in keys" :key="k.id">
             <td>{{ k.streamName }}</td>
             <td>{{ k.studentLabel ?? '—' }}</td>
             <td class="muted mono">{{ k.tokenPreview }}</td>
-            <td><span class="badge" :class="k.revoked ? 'danger' : 'ok'">{{ k.revoked ? '已吊销' : '有效' }}</span></td>
-            <td class="muted">{{ k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('zh-CN', { hour12: false }) : '—' }}</td>
+            <td><span class="badge" :class="k.revoked ? 'danger' : 'ok'">{{ k.revoked ? 'Revoked' : 'Active' }}</span></td>
+            <td class="muted">{{ k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('en-US', { hour12: false }) : '—' }}</td>
             <td>
-              <button @click="copy(k.streamName, '已复制流名')">复制流名</button>
-              <button v-if="!k.revoked" class="danger" @click="revokeKey(k.id)">吊销</button>
+              <button @click="copy(k.streamName, 'Copied stream name')">Copy stream name</button>
+              <button v-if="!k.revoked" class="danger" @click="revokeKey(k.id)">Revoke</button>
             </td>
           </tr>
         </tbody>
       </table>
-      <div v-else class="muted empty">暂无密钥。</div>
+      <div v-else class="muted empty">No stream keys yet.</div>
     </section>
   </div>
 </template>

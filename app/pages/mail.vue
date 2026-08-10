@@ -48,9 +48,9 @@ async function save(): Promise<void> {
     hasPostAuthToken.value = updated.hasPostAuthToken
     senderPassword.value = ''
     postAuthToken.value = ''
-    toast.success('邮件配置已保存')
+    toast.success('Mail configuration saved')
   } catch (e: any) {
-    toast.error('保存失败：' + (e?.data?.statusMessage || e?.message || '未知错误'))
+    toast.error('Save failed: ' + (e?.data?.statusMessage || e?.message || 'Unknown error'))
   } finally {
     saving.value = false
   }
@@ -58,15 +58,15 @@ async function save(): Promise<void> {
 
 async function sendTest(): Promise<void> {
   if (!testTo.value.trim()) {
-    toast.error('请输入测试收件人邮箱')
+    toast.error('Please enter a test recipient email')
     return
   }
   testing.value = true
   try {
     await $fetch('/api/mail/test', { method: 'POST', body: { to: testTo.value.trim() } })
-    toast.success('测试邮件已发送，请查收')
+    toast.success('Test email sent, please check your inbox')
   } catch (e: any) {
-    toast.error('发送失败：' + (e?.data?.statusMessage || e?.message || '未知错误'))
+    toast.error('Send failed: ' + (e?.data?.statusMessage || e?.message || 'Unknown error'))
   } finally {
     testing.value = false
   }
@@ -77,26 +77,26 @@ async function sendTest(): Promise<void> {
   <div class="stack">
     <div class="between">
       <div>
-        <h1>邮件配置</h1>
-        <p class="muted">用于发送注册验证码与系统通知。配置保存在数据库（非环境变量）。</p>
+        <h1>Mail Configuration</h1>
+        <p class="muted">Used to send registration verification codes and system notifications. Configuration is stored in the database (not environment variables).</p>
       </div>
       <div class="row">
-        <span v-if="dirty" class="badge warn">有未保存更改</span>
+        <span v-if="dirty" class="badge warn">Unsaved changes</span>
         <button class="primary" :disabled="!dirty || saving" @click="save">
-          {{ saving ? '保存中…' : '保存' }}
+          {{ saving ? 'Saving…' : 'Save' }}
         </button>
       </div>
     </div>
 
     <div class="grid">
       <section class="card">
-        <h2>发送方式</h2>
+        <h2>Delivery Method</h2>
         <div class="fields">
           <label class="field">
-            <span class="field-label">通道</span>
+            <span class="field-label">Provider</span>
             <select v-model="form.provider">
-              <option value="smtp">SMTP（直连邮件服务器，推荐）</option>
-              <option value="post">HTTP Webhook（转发到下游自动化/邮件服务）</option>
+              <option value="smtp">SMTP (direct connection to mail server, recommended)</option>
+              <option value="post">HTTP Webhook (forward to downstream automation/mail service)</option>
             </select>
           </label>
         </div>
@@ -106,43 +106,43 @@ async function sendTest(): Promise<void> {
         <h2>SMTP</h2>
         <div class="fields">
           <label class="field">
-            <span class="field-label">服务器 (host)</span>
+            <span class="field-label">Server (host)</span>
             <input v-model="form.host" placeholder="smtp.example.com" />
           </label>
           <label class="field">
-            <span class="field-label">端口</span>
+            <span class="field-label">Port</span>
             <input v-model.number="form.port" type="number" />
           </label>
           <label class="field field-bool">
             <input v-model="form.useSsl" type="checkbox" />
-            <span>隐式 TLS (SSL) <small class="muted">— 直连 TLS，通常端口 465</small></span>
+            <span>Implicit TLS (SSL) <small class="muted">— direct TLS, typically port 465</small></span>
           </label>
           <label class="field field-bool">
             <input v-model="form.useTls" type="checkbox" />
-            <span>STARTTLS <small class="muted">— 升级为 TLS，通常端口 587/25</small></span>
+            <span>STARTTLS <small class="muted">— upgrade to TLS, typically port 587/25</small></span>
           </label>
           <label class="field field-bool">
             <input v-model="form.usePassword" type="checkbox" />
-            <span>需要登录认证</span>
+            <span>Requires login authentication</span>
           </label>
           <label class="field">
-            <span class="field-label">发件邮箱 (登录账号)</span>
+            <span class="field-label">Sender email (login account)</span>
             <input v-model="form.senderEmail" placeholder="noreply@example.com" />
           </label>
           <label class="field">
-            <span class="field-label">发件人显示名</span>
-            <input v-model="form.senderDisplay" placeholder="监考收流平台" />
+            <span class="field-label">Sender display name</span>
+            <input v-model="form.senderDisplay" placeholder="Proctoring Ingest Platform" />
           </label>
           <label class="field">
-            <span class="field-label">发件域名 (Message-ID，可选)</span>
+            <span class="field-label">Sender domain (Message-ID, optional)</span>
             <input v-model="form.senderDomain" placeholder="example.com" />
           </label>
           <label class="field">
             <span class="field-label">
-              SMTP 密码
-              <small v-if="hasPassword" class="muted">（已设置；留空则保持不变）</small>
+              SMTP password
+              <small v-if="hasPassword" class="muted">(set; leave blank to keep unchanged)</small>
             </span>
-            <input v-model="senderPassword" type="password" autocomplete="new-password" placeholder="留空保持不变" />
+            <input v-model="senderPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep unchanged" />
           </label>
         </div>
       </section>
@@ -155,7 +155,7 @@ async function sendTest(): Promise<void> {
             <input v-model="form.postUrl" placeholder="https://..." />
           </label>
           <label class="field">
-            <span class="field-label">数据格式</span>
+            <span class="field-label">Data format</span>
             <select v-model="form.postSchema">
               <option value="smtogo">smtogo ({ from, to, subject, html })</option>
               <option value="powerautomate">Power Automate ({ email, content, subject })</option>
@@ -163,24 +163,24 @@ async function sendTest(): Promise<void> {
           </label>
           <label class="field">
             <span class="field-label">
-              Bearer Token（鉴权，可选）
-              <small v-if="hasPostAuthToken" class="muted">（已设置；留空则保持不变）</small>
+              Bearer Token (auth, optional)
+              <small v-if="hasPostAuthToken" class="muted">(set; leave blank to keep unchanged)</small>
             </span>
-            <input v-model="postAuthToken" type="password" autocomplete="new-password" placeholder="留空保持不变" />
+            <input v-model="postAuthToken" type="password" autocomplete="new-password" placeholder="Leave blank to keep unchanged" />
           </label>
         </div>
       </section>
 
       <section class="card">
-        <h2>发送测试</h2>
+        <h2>Send Test</h2>
         <div class="fields">
-          <p class="muted">使用当前配置向指定邮箱发送一封测试邮件（限 1 次/分钟、10 次/天）。</p>
+          <p class="muted">Send a test email to the specified address using the current configuration (limit: 1/min, 10/day).</p>
           <label class="field">
-            <span class="field-label">测试收件人</span>
+            <span class="field-label">Test recipient</span>
             <input v-model="testTo" type="email" placeholder="you@example.com" />
           </label>
           <button :disabled="testing" @click="sendTest">
-            {{ testing ? '发送中…' : '发送测试邮件' }}
+            {{ testing ? 'Sending…' : 'Send test email' }}
           </button>
         </div>
       </section>

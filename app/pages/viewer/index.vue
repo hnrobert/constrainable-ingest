@@ -16,23 +16,23 @@ interface ViewerEvent {
 const { data: events, refresh } = await useFetch<ViewerEvent[]>('/api/viewer/events')
 
 const statusLabel: Record<string, string> = {
-  scheduled: '待开始',
-  live: '进行中',
-  ended: '已结束',
-  draft: '草稿',
-  archived: '已归档',
+  scheduled: 'Upcoming',
+  live: 'In progress',
+  ended: 'Ended',
+  draft: 'Draft',
+  archived: 'Archived',
 }
 
 function fmt(ms: number | null): string {
   if (!ms) return '—'
-  return new Date(ms).toLocaleString('zh-CN', { hour12: false })
+  return new Date(ms).toLocaleString('en-US', { hour12: false })
 }
 
 function windowLabel(e: ViewerEvent): string {
   if (e.startsAt && e.endsAt) return `${fmt(e.startsAt)} → ${fmt(e.endsAt)}`
-  if (e.startsAt) return `起 ${fmt(e.startsAt)}`
-  if (e.endsAt) return `止 ${fmt(e.endsAt)}`
-  return '时间未定'
+  if (e.startsAt) return `From ${fmt(e.startsAt)}`
+  if (e.endsAt) return `Until ${fmt(e.endsAt)}`
+  return 'Time TBD'
 }
 
 // keep the schedule fresh while the page is open
@@ -44,11 +44,11 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 <template>
   <div class="stack">
     <div>
-      <h1>赛事时间表</h1>
-      <p class="muted">各赛事的安排时间。直播仅限管理员/监考观看。</p>
+      <h1>Event Schedule</h1>
+      <p class="muted">Scheduled times for each event. Live viewing is restricted to admins/proctors.</p>
     </div>
 
-    <div v-if="!events?.length" class="card muted empty">暂无已安排的赛事。</div>
+    <div v-if="!events?.length" class="card muted empty">No scheduled events.</div>
 
     <section v-for="e in events" :key="e.id" class="card">
       <div class="between">
@@ -61,7 +61,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
         </span>
       </div>
       <p class="row schedule">
-        <span class="badge muted">时间</span>
+        <span class="badge muted">Time</span>
         <span>{{ windowLabel(e) }}</span>
       </p>
       <p class="row">

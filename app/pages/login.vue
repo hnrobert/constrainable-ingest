@@ -42,7 +42,7 @@ async function doSendCode(): Promise<void> {
   error.value = ''
   const e = email.value.trim()
   if (!e) {
-    error.value = '请先输入邮箱'
+    error.value = 'Please enter your email first'
     return
   }
   if (!session.value) session.value = newSession()
@@ -51,10 +51,10 @@ async function doSendCode(): Promise<void> {
     const r = await sendCode(e, session.value)
     if (r.bootstrap) {
       bootstrap.value = true
-      toast.info('系统尚无管理员，首位注册无需验证码')
+      toast.info('No admin exists yet; the first registration does not require a verification code')
       return
     }
-    toast.success('验证码已发送，请查收邮箱（10 分钟内有效）')
+    toast.success('Verification code sent, please check your inbox (valid for 10 minutes)')
     cooldown.value = 60
     cooldownTimer = setInterval(() => {
       cooldown.value -= 1
@@ -64,7 +64,7 @@ async function doSendCode(): Promise<void> {
       }
     }, 1000)
   } catch (e: any) {
-    error.value = e?.data?.statusMessage || e?.message || '验证码发送失败'
+    error.value = e?.data?.statusMessage || e?.message || 'Failed to send verification code'
   } finally {
     sendingCode.value = false
   }
@@ -73,15 +73,15 @@ async function doSendCode(): Promise<void> {
 async function submit(): Promise<void> {
   error.value = ''
   if (!email.value.trim() || !password.value) {
-    error.value = '请输入邮箱和密码'
+    error.value = 'Please enter your email and password'
     return
   }
   if (mode.value === 'register' && password.value !== confirm.value) {
-    error.value = '两次输入的密码不一致'
+    error.value = 'The two passwords do not match'
     return
   }
   if (mode.value === 'register' && !bootstrap.value && !code.value.trim()) {
-    error.value = '请输入邮箱验证码'
+    error.value = 'Please enter the email verification code'
     return
   }
   loading.value = true
@@ -90,13 +90,13 @@ async function submit(): Promise<void> {
       mode.value === 'login'
         ? await login(email.value.trim(), password.value)
         : await register(email.value.trim(), password.value, code.value.trim(), session.value)
-    toast.success(mode.value === 'login' ? '登录成功' : '注册成功')
+    toast.success(mode.value === 'login' ? 'Signed in successfully' : 'Registered successfully')
     const fallback = homeFor(u)
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : fallback
     // A viewer-role account must never be sent to an admin route.
     await navigateTo(u.role === 'admin' ? redirect : fallback, { replace: true })
   } catch (e: any) {
-    error.value = e?.data?.statusMessage || e?.message || (mode.value === 'login' ? '登录失败' : '注册失败')
+    error.value = e?.data?.statusMessage || e?.message || (mode.value === 'login' ? 'Sign in failed' : 'Registration failed')
   } finally {
     loading.value = false
   }
@@ -118,49 +118,49 @@ onUnmounted(() => {
   <div class="login-wrap">
     <form class="login-card card" @submit.prevent="submit">
       <h1>Constrainable Ingest</h1>
-      <p class="muted">{{ mode === 'login' ? '管理控制台登录' : '注册账号' }}</p>
+      <p class="muted">{{ mode === 'login' ? 'Admin console sign in' : 'Register account' }}</p>
 
       <div class="tabs">
-        <button type="button" :class="{ active: mode === 'login' }" @click="switchMode('login')">登录</button>
-        <button type="button" :class="{ active: mode === 'register' }" @click="switchMode('register')">注册</button>
+        <button type="button" :class="{ active: mode === 'login' }" @click="switchMode('login')">Sign in</button>
+        <button type="button" :class="{ active: mode === 'register' }" @click="switchMode('register')">Register</button>
       </div>
 
       <label class="field">
-        <span class="field-label">邮箱</span>
+        <span class="field-label">Email</span>
         <input v-model="email" type="email" autocomplete="email" autofocus />
       </label>
       <label class="field">
-        <span class="field-label">密码</span>
+        <span class="field-label">Password</span>
         <input v-model="password" type="password" autocomplete="current-password" />
       </label>
       <label v-if="mode === 'register'" class="field">
-        <span class="field-label">确认密码</span>
+        <span class="field-label">Confirm password</span>
         <input v-model="confirm" type="password" autocomplete="new-password" />
       </label>
 
       <!-- Two-step verification code (skipped for the bootstrap super-admin). -->
       <div v-if="mode === 'register' && !bootstrap" class="code-row">
         <label class="field code-field">
-          <span class="field-label">邮箱验证码</span>
-          <input v-model="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" />
+          <span class="field-label">Email verification code</span>
+          <input v-model="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" />
         </label>
         <button type="button" class="code-btn" :disabled="sendingCode || cooldown > 0" @click="doSendCode">
-          {{ cooldown > 0 ? `${cooldown}s` : sendingCode ? '发送中…' : '获取验证码' }}
+          {{ cooldown > 0 ? `${cooldown}s` : sendingCode ? 'Sending…' : 'Get code' }}
         </button>
       </div>
 
       <p v-if="mode === 'register'" class="hint muted">
         <template v-if="bootstrap">
-          系统暂无管理员：首位注册用户将成为超级管理员（无需邮箱验证码），请使用可接收邮件的个人邮箱。
+          No admin exists yet: the first registered user becomes the super admin (no email verification code required). Please use a personal email you can receive mail at.
         </template>
         <template v-else>
-          需先获取邮箱验证码；注册成功后为普通观看者（仅可观看直播）。
+          You must first request an email verification code; after registration you become a regular viewer (can only watch live streams).
         </template>
       </p>
 
       <p v-if="error" class="badge danger">{{ error }}</p>
       <button class="primary" type="submit" :disabled="loading">
-        {{ loading ? '处理中…' : mode === 'login' ? '登录' : '注册' }}
+        {{ loading ? 'Processing…' : mode === 'login' ? 'Sign in' : 'Register' }}
       </button>
     </form>
   </div>

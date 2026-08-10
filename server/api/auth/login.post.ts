@@ -11,14 +11,14 @@ export default defineEventHandler(async (event) => {
   const email = normalizeEmail(String(body?.email ?? ''))
   const password = String(body?.password ?? '')
   if (!email || !password) {
-    throw createError({ statusCode: 400, statusMessage: '邮箱和密码不能为空' })
+    throw createError({ statusCode: 400, statusMessage: 'Email and password are required' })
   }
 
   const user = UsersRepository.findByEmail(email)
   const ok = user ? await verifyPassword(password, user.passwordHash) : false
   if (!user || !ok) {
     audit('warn', 'auth', `failed login: ${email}`, {})
-    throw createError({ statusCode: 401, statusMessage: '邮箱或密码错误' })
+    throw createError({ statusCode: 401, statusMessage: 'Invalid email or password' })
   }
 
   const cookie = await createSessionCookie(user.id, user.role)

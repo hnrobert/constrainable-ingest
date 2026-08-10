@@ -3,7 +3,7 @@ import { z } from 'zod'
 /**
  * Site-wide mail/SMTP sender config. Stored as one JSON row (`key = 'mail'` in
  * app_config, held by server/utils/mail-config.ts), super-admin-owned, editable
- * in the 邮件 settings page. Two providers:
+ * in the Mail settings page. Two providers:
  *   - 'smtp': Nodemailer direct SMTP (host/port/SSL/STARTTLS/auth).
  *   - 'post': HTTP POST webhook relaying to a downstream mailer, two payload
  *     schemas — 'smtogo' ({from,to,subject,html}) and 'powerautomate'

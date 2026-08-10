@@ -4,7 +4,7 @@
  * live-metrics poll loop (Python only probed once; we poll every pollIntervalMs
  * to feed the realtime panel and catch mid-stream setting changes).
  *
- * Flow (see plan "推流/录制生命周期"):
+ * Flow (see plan "Publishing/Recording lifecycle"):
  *   on_publish  → authorizePublish (reject → insert rejected session + audit, return)
  *               → insert session(allowed) → emit session:start → return "0"
  *                 immediately → fire-and-forget monitorSession()

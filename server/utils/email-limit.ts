@@ -51,11 +51,11 @@ export function checkEmailSend(flow: string, email: string, now: Date = new Date
   return { allowed: true, dailyCount: day.length }
 }
 
-/** Throw the HTTP error for a blocked send (Chinese wording for the UI). */
+/** Throw the HTTP error for a blocked send (wording for the UI). */
 export function throwEmailLimit(r: EmailLimitResult): never {
   const statusMessage =
     r.reason === 'minute'
-      ? `发送过于频繁，请等待 ${r.retryInSeconds ?? 60} 秒后再试`
-      : `已达每日发送上限（${EMAIL_DAILY_LIMIT} 封/天）`
+      ? `Sending too frequently — please wait ${r.retryInSeconds ?? 60} seconds and try again`
+      : `Daily send limit reached (${EMAIL_DAILY_LIMIT}/day)`
   throw createError({ statusCode: 429, statusMessage })
 }
