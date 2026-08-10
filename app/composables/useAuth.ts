@@ -5,17 +5,38 @@
  *
  * Email is the login identifier. Registration is two-step: send-code emails a
  * 6-digit code keyed by a client-chosen `session` token, then register consumes
- * it. The first registration (bootstrap) needs no code.
+ * it. The first registration (bootstrap) needs no code. Passwords are RSA-
+ * encrypted on the client before transmission (see usePasswordCipher). An invite
+ * code (from `?invite=`) stashed in sessionStorage is auto-attached to register.
  */
 export interface SessionUser {
   id: number
   email: string
-  role: 'admin' | 'viewer'
+  role: 'admin' | 'user'
 }
 
 export interface BootstrapStatus {
   /** true when no users exist yet → next registrant becomes super admin, no code needed. */
   bootstrap: boolean
+}
+
+const INVITE_KEY = 'ci:invite'
+
+/** Stash an invite code so the next register() auto-joins its group. */
+export function setPendingInvite(code: string): void {
+  if (import.meta.client && code) sessionStorage.setItem(INVITE_KEY, code)
+}
+/** Read (and clear) the stashed invite code. Returns '' when none. */
+export function takePendingInvite(): string {
+  if (!import.meta.client) return ''
+  const v = sessionStorage.getItem(INVITE_KEY) ?? ''
+  sessionStorage.removeItem(INVITE_KEY)
+  return v
+}
+/** Peek the stashed invite code without clearing (for UI hints). */
+export function peekPendingInvite(): string {
+  if (!import.meta.client) return ''
+  return sessionStorage.getItem(INVITE_KEY) ?? ''
 }
 
 export function useAuth() {
@@ -45,9 +66,10 @@ export function useAuth() {
   }
 
   async function login(email: string, password: string): Promise<SessionUser> {
+    const cipher = await encryptPassword(password)
     const u = await $fetch<SessionUser>('/api/auth/login', {
       method: 'POST',
-      body: { email, password },
+      body: { email, password: cipher },
     })
     user.value = u
     probed.value = true
@@ -64,13 +86,17 @@ export function useAuth() {
 
   /**
    * Step 2 (or bootstrap): create the account. In bootstrap mode (first user)
-   * `code`/`session` are ignored by the server. On success the caller is logged
-   * in immediately.
+   * `code`/`session` are ignored by the server. The password is RSA-encrypted
+   * on the client first. A stashed invite code (set from `?invite=`) is auto-
+   * attached so the new account joins the invite's group. On success the caller
+   * is logged in immediately.
    */
   async function register(email: string, password: string, code: string, session: string): Promise<SessionUser> {
+    const cipher = await encryptPassword(password)
+    const invite = takePendingInvite()
     const u = await $fetch<SessionUser>('/api/auth/register', {
       method: 'POST',
-      body: { email, password, code, session },
+      body: { email, password: cipher, code, session, ...(invite ? { invite } : {}) },
     })
     user.value = u
     probed.value = true

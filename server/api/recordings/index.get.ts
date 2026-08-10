@@ -2,6 +2,7 @@
 import { listRecordings } from '../../services/recordings'
 
 export default defineEventHandler((event) => {
+  requireAdmin(event)
   const q = getQuery(event)
   return listRecordings({
     eventId: q.eventId ? Number(q.eventId) : null,

@@ -11,8 +11,10 @@ export const env = {
   /** Recordings root dir */
   recordDir: process.env.RECORD_DIR || './records',
 
-  /** Session signing secret */
+  /** Session signing secret (legacy HMAC; kept for any fallback reads). */
   sessionSecret: process.env.SESSION_SECRET || 'dev-insecure-secret-change-me',
+  /** JWT signing secret (HS256). Falls back to the legacy session secret. */
+  jwtSecret: process.env.JWT_SECRET || process.env.SESSION_SECRET || 'dev-insecure-secret-change-me',
 
   /** SRS HTTP API base (server-to-server) */
   srsApiBase: process.env.SRS_API_BASE || 'http://127.0.0.1:1985/api/v1',

@@ -1,19 +1,21 @@
 /**
  * Step 2 of two-step email registration. Auto-allowlisted (lives under /api/auth/).
  *
- * Email is the login identifier, verified via a 6-digit code emailed by
- * /api/auth/send-code (keyed by `${email}:${session}`). The FIRST user to
- * register (empty users table) becomes the super admin and is EXEMPT from the
- * code + whitelist (mail may not be configured yet) — mirroring
- * unnc-freshmen-verifier-gateway's bootstrap. Every later registrant is a
- * 'viewer' (watch /viewer streams, no admin panel). On success the session cookie
- * is set so the caller is logged in immediately.
+ * The password arrives RSA-encrypted (base64); we decrypt before validating
+ * length on the plaintext. The FIRST user to register (empty users table)
+ * becomes the super admin and is EXEMPT from the code + whitelist (mail may not
+ * be configured yet) — mirroring unnc-freshmen-verifier-gateway's bootstrap.
+ * Every later registrant is a regular 'user'. An optional `invite` code, if
+ * valid, auto-joins the new account to the invite's group. On success a JWT
+ * session cookie is set so the caller is logged in immediately.
  */
 import { createError } from 'h3'
 import { UsersRepository } from '../../repositories/users.repository'
 import { hashPassword } from '../../utils/password'
+import { rsaDecrypt } from '../../utils/rsa'
 import { createSessionCookie } from '../../utils/session'
 import { audit } from '../../services/audit'
+import { consumeInvite } from '../../services/invites'
 import {
   EMAIL_RE,
   describeEmailRules,
@@ -28,12 +30,22 @@ const MIN_PASSWORD = 6
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const email = normalizeEmail(String(body?.email ?? ''))
-  const password = String(body?.password ?? '')
+  const cipher = String(body?.password ?? '')
   const code = String(body?.code ?? '')
   const session = String(body?.session ?? '')
+  const invite = String(body?.invite ?? '').trim()
 
   if (!EMAIL_RE.test(email)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid email format' })
+  }
+
+  // Decrypt the password (client encrypts with the server's RSA public key)
+  // before applying the plaintext length rule.
+  let password: string
+  try {
+    password = rsaDecrypt(cipher)
+  } catch {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid password payload' })
   }
   if (password.length < MIN_PASSWORD) {
     throw createError({ statusCode: 400, statusMessage: `Password must be at least ${MIN_PASSWORD} characters` })
@@ -59,14 +71,28 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const role = isFirst ? 'admin' : 'viewer'
-  const passwordHash = await hashPassword(password)
+  const role = isFirst ? 'admin' : 'user'
+  const passwordHash = hashPassword(password)
   const user = UsersRepository.insert({ email, passwordHash, role })
+
+  // Best-effort invite consumption: join the invite's group if the code is valid.
+  // An invalid/expired invite must NOT block registration — just skip it.
+  let joinedGroup: string | null = null
+  if (invite) {
+    try {
+      const g = consumeInvite(invite, user.id)
+      if (g) joinedGroup = g.name
+    } catch (err) {
+      audit('warn', 'auth', `invite consume failed at register: ${email}`, {
+        detail: { invite, error: err instanceof Error ? err.message : String(err) },
+      })
+    }
+  }
 
   const cookie = await createSessionCookie(user.id, user.role)
   setCookie(event, cookie.name, cookie.value, cookie.options)
   audit('info', 'auth', `register: ${email} (${role})`, {
-    detail: { userId: user.id, role, first: isFirst, verified: !isFirst },
+    detail: { userId: user.id, role, first: isFirst, verified: !isFirst, joinedGroup },
   })
   return { id: user.id, email: user.email, role: user.role }
 })

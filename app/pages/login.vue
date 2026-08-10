@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SessionUser } from '~/composables/useAuth'
+import { setPendingInvite } from '~/composables/useAuth'
 
 definePageMeta({ layout: false })
 
@@ -17,8 +17,15 @@ const error = ref('')
 
 // bootstrap = no users yet → first registrant is super admin, no code needed.
 const bootstrap = ref(false)
+const inviteCode = ref('')
 onMounted(async () => {
   bootstrap.value = await fetchBootstrap()
+  // Stash an invite code from ?invite= so register() auto-joins its group.
+  const inv = typeof route.query.invite === 'string' ? route.query.invite.trim() : ''
+  if (inv) {
+    inviteCode.value = inv
+    setPendingInvite(inv)
+  }
 })
 
 // client flow token keying the verification code (email:session); generated once
@@ -33,10 +40,8 @@ function newSession(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
-/** Admins go to the panel; viewer-role accounts can only watch, so → /viewer. */
-function homeFor(u: SessionUser): string {
-  return u.role === 'admin' ? '/' : '/viewer'
-}
+// Both admins and regular users land on the dashboard after authenticating.
+const HOME = '/dashboard'
 
 async function doSendCode(): Promise<void> {
   error.value = ''
@@ -91,10 +96,8 @@ async function submit(): Promise<void> {
         ? await login(email.value.trim(), password.value)
         : await register(email.value.trim(), password.value, code.value.trim(), session.value)
     toast.success(mode.value === 'login' ? 'Signed in successfully' : 'Registered successfully')
-    const fallback = homeFor(u)
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : fallback
-    // A viewer-role account must never be sent to an admin route.
-    await navigateTo(u.role === 'admin' ? redirect : fallback, { replace: true })
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : HOME
+    await navigateTo(redirect, { replace: true })
   } catch (e: any) {
     error.value = e?.data?.statusMessage || e?.message || (mode.value === 'login' ? 'Sign in failed' : 'Registration failed')
   } finally {
@@ -118,7 +121,8 @@ onUnmounted(() => {
   <div class="login-wrap">
     <form class="login-card card" @submit.prevent="submit">
       <h1>Constrainable Ingest</h1>
-      <p class="muted">{{ mode === 'login' ? 'Admin console sign in' : 'Register account' }}</p>
+      <p class="muted">{{ mode === 'login' ? 'Sign in' : 'Register account' }}</p>
+      <p v-if="inviteCode" class="badge ok">Joining via invite — your account will be added to the invite's group.</p>
 
       <div class="tabs">
         <button type="button" :class="{ active: mode === 'login' }" @click="switchMode('login')">Sign in</button>
@@ -154,7 +158,7 @@ onUnmounted(() => {
           No admin exists yet: the first registered user becomes the super admin (no email verification code required). Please use a personal email you can receive mail at.
         </template>
         <template v-else>
-          You must first request an email verification code; after registration you become a regular viewer (can only watch live streams).
+          You must first request an email verification code; after registration you become a regular user (event schedule and details only).
         </template>
       </p>
 

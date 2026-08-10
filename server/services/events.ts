@@ -1,13 +1,15 @@
 /**
  * Event CRUD (business logic). An event scopes a set of students/keys/sessions/
- * recordings. DB access goes through EventsRepository; this layer owns slug
- * derivation, validation, passphrase hashing, DTO mapping, and audit.
+ * recordings. DB access goes through EventsRepository + GroupsRepository; this
+ * layer owns slug derivation, validation, visibility/group scoping, DTO mapping,
+ * and audit.
  */
 import { createError } from 'h3'
 import { EventsRepository } from '../repositories/events.repository'
+import { GroupsRepository } from '../repositories/groups.repository'
 import type { Event } from '../database/schema'
 import { limitsOverrideSchema, type LimitsOverride } from '#shared/config'
-import { hashPassword } from '../utils/password'
+import type { EventGroupRef, EventVisibility } from '#shared/event-view'
 import { generateToken, hashToken } from '../utils/token'
 import { audit } from './audit'
 
@@ -21,8 +23,9 @@ export interface EventView {
   status: Event['status']
   limitsOverride: LimitsOverride | null
   recordEnabled: boolean
-  viewerAccess: Event['viewerAccess']
-  hasViewerPassphrase: boolean
+  visibility: EventVisibility
+  /** groups linked to this event (meaningful when visibility === 'groups'). */
+  groups: EventGroupRef[]
   /** fingerprint (prefix) of the per-event publish token, or null if none set. */
   publishTokenPreview: string | null
   createdAt: number
@@ -38,12 +41,13 @@ export interface EventInput {
   status?: Event['status']
   limitsOverride?: LimitsOverride | null
   recordEnabled?: boolean
-  viewerAccess?: Event['viewerAccess']
-  /** plaintext passphrase to set (empty string clears it); never returned */
-  viewerPassphrase?: string
+  visibility?: EventVisibility
+  /** group ids to scope the event to (applied when visibility === 'groups'). */
+  groupIds?: number[]
 }
 
 function toView(e: Event): EventView {
+  const groupRows = GroupsRepository.findGroupsForEvent(e.id)
   return {
     id: e.id,
     name: e.name,
@@ -54,8 +58,8 @@ function toView(e: Event): EventView {
     status: e.status,
     limitsOverride: e.limitsOverride ? (JSON.parse(e.limitsOverride) as LimitsOverride) : null,
     recordEnabled: e.recordEnabled,
-    viewerAccess: e.viewerAccess,
-    hasViewerPassphrase: !!e.viewerPassphraseHash,
+    visibility: e.visibility,
+    groups: groupRows.map((g) => ({ id: g.id, name: g.name })),
     publishTokenPreview: e.publishTokenPrefix ?? null,
     createdAt: e.createdAt.getTime(),
     updatedAt: e.updatedAt.getTime(),
@@ -115,14 +119,19 @@ export function createEvent(input: EventInput): EventView {
     status: input.status ?? 'draft',
     limitsOverride,
     recordEnabled: input.recordEnabled ?? true,
-    viewerAccess: input.viewerAccess ?? 'public',
+    visibility: input.visibility ?? 'registered',
   })
 
-  audit('info', 'admin', `event created: ${name}`, { eventId: row.id, detail: { slug } })
+  if (input.groupIds) GroupsRepository.setEventGroups(row.id, input.groupIds)
+
+  audit('info', 'admin', `event created: ${name}`, {
+    eventId: row.id,
+    detail: { slug, visibility: row.visibility },
+  })
   return toView(row)
 }
 
-export async function updateEvent(id: number, patch: EventInput): Promise<EventView> {
+export function updateEvent(id: number, patch: EventInput): EventView {
   const existing = getRow(id)
   const set: Record<string, unknown> = { updatedAt: new Date() }
 
@@ -142,20 +151,17 @@ export async function updateEvent(id: number, patch: EventInput): Promise<EventV
   if (patch.endsAt !== undefined) set.endsAt = toTs(patch.endsAt)
   if (patch.status != null) set.status = patch.status
   if (patch.recordEnabled != null) set.recordEnabled = patch.recordEnabled
-  if (patch.viewerAccess != null) set.viewerAccess = patch.viewerAccess
-  if (patch.viewerPassphrase !== undefined) {
-    const pp = patch.viewerPassphrase.trim()
-    set.viewerPassphraseHash = pp ? await hashPassword(pp) : null
-  }
+  if (patch.visibility != null) set.visibility = patch.visibility
   if (patch.limitsOverride !== undefined) {
     set.limitsOverride =
       patch.limitsOverride == null ? null : JSON.stringify(limitsOverrideSchema.parse(patch.limitsOverride))
   }
 
   EventsRepository.update(id, set)
+  if (patch.groupIds !== undefined) GroupsRepository.setEventGroups(id, patch.groupIds)
   audit('info', 'admin', `event updated: ${existing.name}`, {
     eventId: id,
-    detail: { fields: Object.keys(set) },
+    detail: { fields: Object.keys(set), groupScope: patch.groupIds !== undefined },
   })
   return toView(getRow(id))
 }

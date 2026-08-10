@@ -1,7 +1,13 @@
-/** Login: verify email + password, set the signed session cookie, return the user. */
+/**
+ * Login: the client posts an RSA-encrypted password (base64). We decrypt it,
+ * verify against the stored hash (new salt:hex format or legacy Bun.password
+ * PHC), issue a JWT session cookie, and return the user. A legacy hash that
+ * verifies is transparently re-hashed to the new salt:hex format and persisted.
+ */
 import { createError } from 'h3'
 import { UsersRepository } from '../../repositories/users.repository'
-import { verifyPassword } from '../../utils/password'
+import { hashPassword, isLegacyHash, verifyPassword } from '../../utils/password'
+import { rsaDecrypt } from '../../utils/rsa'
 import { createSessionCookie } from '../../utils/session'
 import { audit } from '../../services/audit'
 import { normalizeEmail } from '../../utils/registration'
@@ -9,16 +15,29 @@ import { normalizeEmail } from '../../utils/registration'
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const email = normalizeEmail(String(body?.email ?? ''))
-  const password = String(body?.password ?? '')
-  if (!email || !password) {
+  const cipher = String(body?.password ?? '')
+  if (!email || !cipher) {
     throw createError({ statusCode: 400, statusMessage: 'Email and password are required' })
   }
 
+  let plain: string
+  try {
+    plain = rsaDecrypt(cipher)
+  } catch {
+    // Malformed/missing ciphertext — don't reveal which check failed.
+    throw createError({ statusCode: 401, statusMessage: 'Invalid email or password' })
+  }
+
   const user = UsersRepository.findByEmail(email)
-  const ok = user ? await verifyPassword(password, user.passwordHash) : false
+  const ok = user ? await verifyPassword(plain, user.passwordHash) : false
   if (!user || !ok) {
     audit('warn', 'auth', `failed login: ${email}`, {})
     throw createError({ statusCode: 401, statusMessage: 'Invalid email or password' })
+  }
+
+  // Upgrade a legacy Bun.password hash to the new salt:hex format, in place.
+  if (isLegacyHash(user.passwordHash)) {
+    UsersRepository.updatePassword(user.id, hashPassword(plain))
   }
 
   const cookie = await createSessionCookie(user.id, user.role)

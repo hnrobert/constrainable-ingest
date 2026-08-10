@@ -16,7 +16,8 @@ export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
-  role: text('role', { enum: ['admin', 'viewer'] }).notNull().default('admin'),
+  /** admin = full management + watching; user = browse authorized events only. */
+  role: text('role', { enum: ['admin', 'user'] }).notNull().default('user'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(now),
 })
 
@@ -43,10 +44,15 @@ export const events = sqliteTable(
     /** JSON: per-event limits override (null fields = inherit global) */
     limitsOverride: text('limits_override'),
     recordEnabled: integer('record_enabled', { mode: 'boolean' }).notNull().default(true),
-    viewerAccess: text('viewer_access', { enum: ['public', 'passphrase'] })
+    /**
+     * Who may see this event in catalogs/details:
+     *   public     — anyone (incl. outsiders, on the homepage)
+     *   registered — any logged-in user (the default)
+     *   groups     — only members of the event's linked groups (event_groups)
+     */
+    visibility: text('visibility', { enum: ['public', 'registered', 'groups'] })
       .notNull()
-      .default('public'),
-    viewerPassphraseHash: text('viewer_passphrase_hash'),
+      .default('registered'),
     /** argon2id hash of the per-event publish token (alternative to per-student stream keys). */
     publishTokenHash: text('publish_token_hash'),
     /** first chars of the plaintext token — indexed for on_publish prefix lookup. */
@@ -205,6 +211,70 @@ export const auditLog = sqliteTable(
   (t) => [index('audit_ts_idx').on(t.ts), index('audit_event_idx').on(t.eventId)],
 )
 
+/* --------------------------------- groups --------------------------------- */
+// Arbitrary user groupings. An event set to visibility 'groups' is only visible
+// to users who are a member of at least one of its linked groups (event_groups).
+export const groups = sqliteTable('groups', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull().unique(),
+  description: text('description'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(now),
+})
+
+/* user ↔ group membership (many-to-many) */
+export const userGroups = sqliteTable(
+  'user_groups',
+  {
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    groupId: integer('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.groupId] }), index('user_groups_group_idx').on(t.groupId)],
+)
+
+/* event ↔ group scoping (many-to-many); consulted when visibility = 'groups' */
+export const eventGroups = sqliteTable(
+  'event_groups',
+  {
+    eventId: integer('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    groupId: integer('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.eventId, t.groupId] }), index('event_groups_group_idx').on(t.groupId)],
+)
+
+/* ------------------------------ invite_links ------------------------------ */
+// Single-use-ish invite codes that grant membership in a group. Registering with
+// `?invite=CODE` auto-joins the group; an existing user can claim one too.
+// Code is a 24-char hex string (opaque, unguessable), per the verifier gateway.
+export const inviteLinks = sqliteTable(
+  'invite_links',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    code: text('code').notNull().unique(),
+    groupId: integer('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    /** null = unlimited uses */
+    maxUses: integer('max_uses'),
+    usedCount: integer('used_count').notNull().default(0),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }),
+    active: integer('active', { mode: 'boolean' }).notNull().default(true),
+    /** admin-facing label for the link */
+    note: text('note'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(now),
+  },
+  (t) => [index('invite_group_idx').on(t.groupId), index('invite_code_idx').on(t.code)],
+)
+
 /* ------------------------------- relations -------------------------------- */
 // Drizzle relations enable the relational query API (db.query.events.findMany({...})).
 // Kept minimal; services mostly use SQL-style builders for hot paths.
@@ -225,3 +295,11 @@ export type NewRecording = typeof recordings.$inferInsert
 export type AuditEntry = typeof auditLog.$inferSelect
 export type NewAuditEntry = typeof auditLog.$inferInsert
 export type AppConfigRow = typeof appConfig.$inferSelect
+export type Group = typeof groups.$inferSelect
+export type NewGroup = typeof groups.$inferInsert
+export type UserGroup = typeof userGroups.$inferSelect
+export type NewUserGroup = typeof userGroups.$inferInsert
+export type EventGroup = typeof eventGroups.$inferSelect
+export type NewEventGroup = typeof eventGroups.$inferInsert
+export type InviteLink = typeof inviteLinks.$inferSelect
+export type NewInviteLink = typeof inviteLinks.$inferInsert

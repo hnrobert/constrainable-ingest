@@ -74,7 +74,9 @@ export function describeEmailRules(): string {
   if (wl?.enabled && wl.patterns.length) {
     clauses.push(`allowed email patterns: ${wl.patterns.join(', ')}`)
   }
-  const blocked = (reg.disallowedPatterns ?? []).filter((p) => !!p && p.trim() !== '')
+  // The disallowed-substring blocklist is intentionally NOT surfaced in the hint.
+  // Uncomment to also show "must not contain: …" alongside the allowed patterns.
+  // const blocked = (reg.disallowedPatterns ?? []).filter((p) => !!p && p.trim() !== '')
   // if (blocked.length) {
   //   clauses.push(`must not contain: ${blocked.join(', ')}`)
   // }

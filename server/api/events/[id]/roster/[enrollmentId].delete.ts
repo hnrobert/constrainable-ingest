@@ -2,6 +2,7 @@
 import { removeEnrollment } from '../../../../services/roster'
 
 export default defineEventHandler((event) => {
+  requireAdmin(event)
   const id = Number(getRouterParam(event, 'id'))
   const enrollmentId = Number(getRouterParam(event, 'enrollmentId'))
   if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(enrollmentId) || enrollmentId <= 0) {

@@ -52,6 +52,24 @@ function syncSchema(): void {
   console.log('[db] schema synced via drizzle-kit push')
 }
 
+/**
+ * Idempotent data fixes that `drizzle-kit push` (pure DDL) can't express. Each
+ * step guards on the current row state so it's a no-op once applied. Runs on
+ * the raw sqlite handle right after syncSchema(), once per process.
+ */
+function runDataMigrations(sqlite: Database): void {
+  // role enum narrowed admin|viewer → admin|user: convert legacy accounts.
+  // SQLite CHECK constraints aren't retroactive on existing rows, so any
+  // 'viewer' rows from before the enum change survive until rewritten here.
+  try {
+    const r = sqlite.run('UPDATE users SET role = ? WHERE role = ?', ['user', 'viewer'])
+    if (r.changes > 0) console.log(`[db] migrated ${r.changes} legacy viewer→user role(s)`)
+  } catch (err) {
+    // E.g. a fresh DB where the users table exists but is empty — ignore.
+    console.warn('[db] role migration skipped:', err instanceof Error ? err.message : err)
+  }
+}
+
 function createClient(): DB {
   mkdirSync(dirname(env.dbPath), { recursive: true })
   const sqlite = new Database(env.dbPath, { create: true })
@@ -62,6 +80,7 @@ function createClient(): DB {
   // Tables must exist before this client is handed out (see file header).
   if (!globalForDb.__ingestDbReady) {
     syncSchema()
+    runDataMigrations(sqlite)
     globalForDb.__ingestDbReady = true
   }
   return drizzle(sqlite, { schema })

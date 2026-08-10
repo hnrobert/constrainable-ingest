@@ -5,7 +5,7 @@
  * first-registrant-is-super-admin rule (and the bootstrap code-verification
  * exemption) in the auth handlers, not here.
  */
-import { count, eq } from 'drizzle-orm'
+import { count, desc, eq } from 'drizzle-orm'
 import { db } from '../database/db'
 import { users, type NewUser, type User } from '../database/schema'
 
@@ -16,6 +16,10 @@ export const UsersRepository = {
   /** Email is normalized (trimmed + lowercased) before lookup. */
   findByEmail(email: string): User | undefined {
     return db.select().from(users).where(eq(users.email, email)).get()
+  },
+  /** All users, newest first (admin user-management page). */
+  findAll(): User[] {
+    return db.select().from(users).orderBy(desc(users.createdAt), desc(users.id)).all()
   },
   count(): number {
     const row = db.select({ n: count() }).from(users).get()
@@ -28,5 +32,13 @@ export const UsersRepository = {
   },
   insert(values: NewUser): User {
     return db.insert(users).values(values).returning().get()
+  },
+  /** Change a user's role (admin ⇄ user). */
+  updateRole(id: number, role: User['role']): void {
+    db.update(users).set({ role }).where(eq(users.id, id)).run()
+  },
+  /** Replace the password hash (used by legacy re-hash on login + future resets). */
+  updatePassword(id: number, passwordHash: string): void {
+    db.update(users).set({ passwordHash }).where(eq(users.id, id)).run()
   },
 }

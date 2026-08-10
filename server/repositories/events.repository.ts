@@ -2,7 +2,7 @@
  * events table — data access only. An event scopes its roster/keys/sessions/
  * recordings. No isDefault concept (no seed); ordering is by scheduled start.
  */
-import { and, asc, eq, inArray, ne } from 'drizzle-orm'
+import { and, asc, eq, ne } from 'drizzle-orm'
 import { db } from '../database/db'
 import { events, type Event, type NewEvent } from '../database/schema'
 
@@ -19,15 +19,6 @@ export const EventsRepository = {
       ? db.select().from(events).where(and(eq(events.slug, slug), ne(events.id, exceptId)))
       : db.select().from(events).where(eq(events.slug, slug))
     return q.get()
-  },
-  /** Viewer catalog: events in one of the given (viewable) statuses. */
-  findViewable(statuses: Event['status'][]): Event[] {
-    return db
-      .select()
-      .from(events)
-      .where(inArray(events.status, statuses))
-      .orderBy(asc(events.startsAt), asc(events.id))
-      .all()
   },
   /** on_publish hot path: candidate events whose publish-token prefix matches. */
   findByPublishTokenPrefix(prefix: string): Event[] {

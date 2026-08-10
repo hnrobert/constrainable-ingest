@@ -11,6 +11,7 @@ import { sendMailWithConfig } from '../../services/mail'
 import { audit } from '../../services/audit'
 
 export default defineEventHandler(async (event) => {
+  requireAdmin(event)
   const body = await readBody(event)
   const to = normalizeEmail(String(body?.to ?? ''))
   if (!EMAIL_RE.test(to)) {

@@ -19,8 +19,8 @@ export function tokenPreview(token: string): string {
   return `${token.slice(0, 4)}…${token.slice(-4)}`
 }
 
-export const hashToken = (token: string): Promise<string> => hashPassword(token)
-export const verifyToken = (token: string, hash: string): Promise<boolean> => verifyPassword(token, hash)
+export const hashToken = async (token: string): Promise<string> => hashPassword(token)
+export const verifyToken = async (token: string, hash: string): Promise<boolean> => verifyPassword(token, hash)
 
 /** Build a stream name from a student number, falling back to a random slug. */
 export function streamNameFor(studentNumber?: string | null): string {

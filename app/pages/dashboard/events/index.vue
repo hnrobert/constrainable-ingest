@@ -3,6 +3,8 @@ import type { EventView, EventStatus } from '#shared/event-view'
 
 const toast = useToast()
 const { data: events, refresh } = await useFetch<EventView[]>('/api/events')
+const { user } = useAuth()
+const isAdmin = computed(() => user.value?.role === 'admin')
 
 const creating = ref(false)
 const saving = ref(false)
@@ -55,7 +57,7 @@ async function create(): Promise<void> {
         <h1>Events</h1>
         <p class="muted">Each event has its own roster, stream keys, and config overrides.</p>
       </div>
-      <button class="primary" @click="creating = !creating">
+      <button v-if="isAdmin" class="primary" @click="creating = !creating">
         {{ creating ? 'Cancel' : '+ New event' }}
       </button>
     </div>
@@ -91,7 +93,7 @@ async function create(): Promise<void> {
             <td>{{ e.name }}</td>
             <td class="muted">{{ e.slug }}</td>
             <td><span class="badge" :class="statusClass[e.status]">{{ statusLabel[e.status] }}</span></td>
-            <td><NuxtLink :to="`/events/${e.id}`"><button>Manage</button></NuxtLink></td>
+            <td><NuxtLink :to="`/dashboard/events/${e.id}`"><button>{{ isAdmin ? 'Manage' : 'View' }}</button></NuxtLink></td>
           </tr>
         </tbody>
       </table>

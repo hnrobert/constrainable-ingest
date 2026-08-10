@@ -7,6 +7,7 @@ import { saveMailConfig, mailConfigToClient } from '../../utils/mail-config'
 import { audit } from '../../services/audit'
 
 export default defineEventHandler(async (event) => {
+  requireAdmin(event)
   const body = await readBody(event)
   const next = saveMailConfig(body ?? {})
   audit('info', 'config', 'mail config updated', {

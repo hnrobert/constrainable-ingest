@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { EventView, EventStatus } from '#shared/event-view'
+import type { EventView, EventStatus, EventVisibility } from '#shared/event-view'
+import type { GroupView } from '#shared/groups'
 
 interface RosterEntry {
   enrollmentId: number
@@ -31,35 +32,82 @@ const route = useRoute()
 const id = Number(route.params.id)
 const toast = useToast()
 const obs = useObsConfig()
+const { user } = useAuth()
+const isAdmin = computed(() => user.value?.role === 'admin')
 
 const { data: event, refresh: refreshEvent } = await useFetch<EventView>(`/api/events/${id}`)
 const { data: roster, refresh: refreshRoster } = await useFetch<RosterEntry[]>(`/api/events/${id}/roster`)
 const { data: keys, refresh: refreshKeys } = await useFetch<KeyView[]>(`/api/events/${id}/keys`)
 
-// ---- settings ----
+// ---- settings (admin-only) ----
 const settings = ref<EventView | null>(null)
-const viewerPassphrase = ref('') // set-only; never returned by the server
-watchEffect(() => { if (event.value && !settings.value) settings.value = structuredClone(toRaw(event.value)) })
-const settingsDirty = computed(
-  () => JSON.stringify(settings.value) !== JSON.stringify(event.value) || viewerPassphrase.value !== '',
-)
+const selectedGroupIds = ref<number[]>([])
+const allGroups = ref<GroupView[]>([])
+watchEffect(() => {
+  if (event.value && !settings.value) {
+    settings.value = structuredClone(toRaw(event.value))
+    selectedGroupIds.value = event.value.groups.map((g) => g.id)
+  }
+})
+// Groups catalog is admin-only; fetch lazily on the client for admins only.
+onMounted(async () => {
+  if (!isAdmin.value) return
+  try {
+    allGroups.value = await $fetch<GroupView[]>('/api/groups')
+  } catch {
+    /* non-admin or transient — leave empty */
+  }
+})
+
+function sameSet(a: number[], b: number[]): boolean {
+  return a.slice().sort().join(',') === b.slice().sort().join(',')
+}
+const settingsDirty = computed(() => {
+  if (!settings.value || !event.value) return false
+  const s = settings.value
+  const e = event.value
+  const scalarChanged =
+    s.name !== e.name ||
+    s.slug !== e.slug ||
+    s.description !== e.description ||
+    s.status !== e.status ||
+    s.recordEnabled !== e.recordEnabled ||
+    s.visibility !== e.visibility
+  return scalarChanged || !sameSet(selectedGroupIds.value, e.groups.map((g) => g.id))
+})
+
+const visibilityLabel: Record<EventVisibility, string> = {
+  public: 'Public',
+  registered: 'Registered users',
+  groups: 'Specific groups',
+}
 
 async function saveSettings(): Promise<void> {
   if (!settings.value) return
   try {
-    const body: Record<string, unknown> = { ...settings.value }
-    if (viewerPassphrase.value !== '') body.viewerPassphrase = viewerPassphrase.value
-    const updated = await $fetch<EventView>(`/api/events/${id}`, { method: 'PATCH', body })
+    const s = settings.value
+    const updated = await $fetch<EventView>(`/api/events/${id}`, {
+      method: 'PATCH',
+      body: {
+        name: s.name,
+        slug: s.slug,
+        description: s.description,
+        status: s.status,
+        recordEnabled: s.recordEnabled,
+        visibility: s.visibility,
+        groupIds: selectedGroupIds.value,
+      },
+    })
     event.value = updated
     settings.value = structuredClone(updated)
-    viewerPassphrase.value = ''
+    selectedGroupIds.value = updated.groups.map((g) => g.id)
     toast.success('Event updated')
   } catch (e: any) {
     toast.error('Save failed: ' + (e?.data?.statusMessage || e?.message || ''))
   }
 }
 
-// ---- roster CSV import ----
+// ---- roster CSV import (admin) ----
 const csvText = ref('')
 const importing = ref(false)
 function parseCsv(text: string): { studentNumber: string; name: string; email?: string; seatLabel?: string }[] {
@@ -107,11 +155,11 @@ async function removeEntry(enrollmentId: number): Promise<void> {
   }
 }
 
-// ---- keys ----
+// ---- keys (admin) ----
 const freshKeys = ref<GeneratedKey[]>([])
 const genForm = reactive({ studentNumber: '', name: '', email: '', seatLabel: '', streamName: '' })
 
-// ---- per-event publish token ----
+// ---- per-event publish token (admin) ----
 const freshPublishToken = ref<{ token: string; preview: string; isCustom: boolean } | null>(null)
 const rotatingToken = ref(false)
 const customToken = ref('')
@@ -239,14 +287,21 @@ const statusOptions: { value: EventStatus; label: string }[] = [
   <div v-if="event" class="stack">
     <div class="between">
       <div>
-        <NuxtLink to="/events" class="muted">← Back to events</NuxtLink>
+        <NuxtLink to="/dashboard/events" class="muted">← Back to events</NuxtLink>
         <h1>{{ event.name }}</h1>
         <p class="muted">slug: {{ event.slug }}</p>
+        <p v-if="event.description" class="muted">{{ event.description }}</p>
+        <p class="muted small">
+          Status: {{ event.status }} · Visibility: {{ visibilityLabel[event.visibility] }}
+          <template v-if="event.visibility === 'groups' && event.groups.length">
+            · Groups: {{ event.groups.map((g) => g.name).join(', ') }}
+          </template>
+        </p>
       </div>
     </div>
 
     <!-- freshly generated keys (plaintext shown once) -->
-    <section v-if="freshKeys.length" class="card fresh">
+    <section v-if="isAdmin && freshKeys.length" class="card fresh">
       <div class="between">
         <h2>Newly generated stream keys (shown only once, copy them now)</h2>
         <button @click="freshKeys = []">Close</button>
@@ -260,8 +315,8 @@ const statusOptions: { value: EventStatus; label: string }[] = [
       </div>
     </section>
 
-    <!-- settings -->
-    <section class="card">
+    <!-- settings (admin-only) -->
+    <section v-if="isAdmin" class="card">
       <h2>Event settings</h2>
       <div v-if="settings" class="form-grid">
         <label class="field"><span class="field-label">Name</span><input v-model="settings.name" /></label>
@@ -272,20 +327,27 @@ const statusOptions: { value: EventStatus; label: string }[] = [
             <option v-for="o in statusOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
           </select>
         </label>
-        <label class="field"><span class="field-label">Viewer access</span>
-          <select v-model="settings.viewerAccess">
-            <option value="public">Public</option>
-            <option value="passphrase">Passphrase</option>
+        <label class="field"><span class="field-label">Visibility</span>
+          <select v-model="settings.visibility">
+            <option value="registered">Registered users</option>
+            <option value="public">Public (anyone, incl. homepage)</option>
+            <option value="groups">Specific groups</option>
           </select>
         </label>
         <label class="field-bool">
           <input type="checkbox" v-model="settings.recordEnabled" />
           <span>Enable recording</span>
         </label>
-        <label v-if="settings.viewerAccess === 'passphrase'" class="field full">
-          <span class="field-label">Viewer passphrase{{ event.hasViewerPassphrase ? ' (set, leave blank to keep unchanged)' : '' }}</span>
-          <input v-model="viewerPassphrase" type="password" placeholder="Set viewer passphrase" />
-        </label>
+        <div v-if="settings.visibility === 'groups'" class="field full">
+          <span class="field-label">Allowed groups</span>
+          <div class="group-checks">
+            <label v-for="g in allGroups" :key="g.id" class="group-check">
+              <input type="checkbox" :value="g.id" v-model="selectedGroupIds" />
+              <span>{{ g.name }} <span class="muted">({{ g.memberCount }})</span></span>
+            </label>
+            <p v-if="!allGroups.length" class="muted small">No groups exist yet — create some on the Groups page first.</p>
+          </div>
+        </div>
       </div>
       <div class="row right">
         <span v-if="settingsDirty" class="badge warn">Unsaved changes</span>
@@ -293,8 +355,8 @@ const statusOptions: { value: EventStatus; label: string }[] = [
       </div>
     </section>
 
-    <!-- per-event publish token -->
-    <section class="card">
+    <!-- per-event publish token (admin-only) -->
+    <section v-if="isAdmin" class="card">
       <div class="between">
         <h2>Event publish token</h2>
         <span v-if="event.publishTokenPreview" class="badge ok">Set <code class="mono">{{ event.publishTokenPreview }}…</code></span>
@@ -339,8 +401,8 @@ const statusOptions: { value: EventStatus; label: string }[] = [
       </p>
     </section>
 
-    <!-- roster -->
-    <section class="card">
+    <!-- roster (admin-only) -->
+    <section v-if="isAdmin" class="card">
       <div class="between">
         <h2>Roster ({{ roster?.length ?? 0 }})</h2>
       </div>
@@ -364,8 +426,8 @@ const statusOptions: { value: EventStatus; label: string }[] = [
       <div v-else class="muted empty">No roster yet.</div>
     </section>
 
-    <!-- keys -->
-    <section class="card">
+    <!-- keys (admin-only) -->
+    <section v-if="isAdmin" class="card">
       <div class="between">
         <h2>Stream keys ({{ keys?.length ?? 0 }})</h2>
         <button class="primary" :disabled="generating" @click="generateAll">Bulk generate for students without keys</button>
@@ -427,4 +489,7 @@ const statusOptions: { value: EventStatus; label: string }[] = [
 code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; }
 .gen-one { margin: 0.5rem 0; }
 textarea { width: 100%; margin: 0.5rem 0; resize: vertical; }
+.group-checks { display: flex; flex-direction: column; gap: 0.35rem; }
+.group-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; }
+.group-check input { width: auto; }
 </style>

@@ -1,18 +1,25 @@
 <script setup lang="ts">
-// Admin shell. Nav items enable as each phase's page lands; unbuilt ones are
-// muted and non-navigating. The server middleware + global auth middleware gate
-// this whole layout; logout clears the session.
+// Dashboard shell. Nav is role-aware: both roles see Dashboard + Events (their
+// authorized catalog); management pages are admin-only. Brand links to the
+// public homepage. The server middleware + requireAdmin are the real gates;
+// this nav just hides unreachable routes from regular users.
 const { user, logout } = useAuth()
+const isAdmin = computed(() => user.value?.role === 'admin')
 
-const nav = [
-  { label: 'Overview', to: '/' },
-  { label: 'Live', to: '/streams' },
-  { label: 'Events', to: '/events' },
-  { label: 'Recordings', to: '/recordings' },
-  { label: 'Config', to: '/config' },
-  { label: 'Mail', to: '/mail' },
-  { label: 'Audit', to: '/audit', enabled: false },
+const baseNav: { label: string; to: string }[] = [
+  { label: 'Dashboard', to: '/dashboard' },
+  { label: 'Events', to: '/dashboard/events' },
 ]
+const adminNav: { label: string; to: string }[] = [
+  { label: 'Live', to: '/dashboard/streams' },
+  { label: 'Recordings', to: '/dashboard/recordings' },
+  { label: 'Users', to: '/dashboard/users' },
+  { label: 'Groups', to: '/dashboard/groups' },
+  { label: 'Config', to: '/dashboard/config' },
+  { label: 'Mail', to: '/dashboard/mail' },
+  { label: 'Audit', to: '/dashboard/audit' },
+]
+const nav = computed(() => (isAdmin.value ? [...baseNav, ...adminNav] : baseNav))
 </script>
 
 <template>
@@ -20,14 +27,11 @@ const nav = [
     <header class="app-header">
       <NuxtLink to="/" class="brand">Constrainable Ingest</NuxtLink>
       <nav class="app-nav">
-        <template v-for="item in nav" :key="item.to">
-          <NuxtLink v-if="item.enabled !== false" :to="item.to">{{ item.label }}</NuxtLink>
-          <span v-else class="nav-disabled" :title="`Not implemented (${item.label})`">{{ item.label }}</span>
-        </template>
+        <NuxtLink v-for="item in nav" :key="item.to" :to="item.to">{{ item.label }}</NuxtLink>
       </nav>
       <div class="app-auth">
-        <NuxtLink to="/viewer" class="viewer-link" target="_blank">Viewer</NuxtLink>
         <span v-if="user" class="app-user">{{ user.email }}</span>
+        <span v-if="user" class="app-role">{{ isAdmin ? 'admin' : 'user' }}</span>
         <button v-if="user" class="ghost" @click="logout">Sign out</button>
       </div>
     </header>
@@ -53,13 +57,12 @@ const nav = [
 }
 .brand { font-weight: 600; font-size: 1rem; color: var(--text); }
 .brand:hover { color: var(--primary); }
-.app-nav { display: flex; gap: 1rem; }
+.app-nav { display: flex; gap: 1rem; flex-wrap: wrap; }
 .app-nav a { color: var(--muted); font-size: 0.9rem; }
 .app-nav a.router-link-active { color: var(--text); }
-.nav-disabled { color: var(--muted); opacity: 0.4; font-size: 0.9rem; cursor: default; }
 .app-main { padding: 1.25rem; max-width: 1200px; margin: 0 auto; }
 .app-auth { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
 .app-user { font-size: 0.85rem; color: var(--muted); }
+.app-role { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .app-auth .ghost { font-size: 0.8rem; }
-.viewer-link { font-size: 0.8rem; color: var(--muted); }
 </style>
