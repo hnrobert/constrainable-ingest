@@ -40,22 +40,27 @@ export default defineEventHandler(async (event) => {
     return { ok: true, bootstrap: true }
   }
 
+  // Disallowed mailing-list addresses never get a code (403, like the verifier).
   if (isDisallowedEmail(email)) {
-    throw createError({ statusCode: 400, statusMessage: '该邮箱地址不允许注册' })
+    throw createError({ statusCode: 403, statusMessage: '该邮箱地址不允许注册' })
   }
-  if (UsersRepository.findByEmail(email)) {
-    throw createError({ statusCode: 409, statusMessage: '该邮箱已注册' })
-  }
+  // Domain whitelist (bootstrap is exempt — handled above).
   if (!passesWhitelist(email)) {
     throw createError({ statusCode: 403, statusMessage: '该邮箱域名不在允许注册的范围' })
+  }
+  // Don't reveal whether an account already exists (anti-enumeration), and don't
+  // spam existing users — return the same OK the success path does (verifier parity).
+  if (UsersRepository.findByEmail(email)) {
+    return { ok: true }
+  }
+  // Mail must be configured before we rate-limit/send: an un-sendable request
+  // shouldn't count against the recipient's quota (verifier order).
+  if (!isMailConfigured()) {
+    throw createError({ statusCode: 503, statusMessage: '邮件服务未配置，请联系管理员' })
   }
 
   const limit = checkEmailSend('code', email)
   if (!limit.allowed) throwEmailLimit(limit)
-
-  if (!isMailConfigured()) {
-    throw createError({ statusCode: 503, statusMessage: '邮件服务未配置，请联系管理员' })
-  }
 
   const code = String(randomInt(100000, 1000000))
   issueCode(email, session, code)

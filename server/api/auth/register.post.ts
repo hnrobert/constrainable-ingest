@@ -22,7 +22,7 @@ import {
 } from '../../utils/registration'
 import { consumeCode } from '../../utils/email-code'
 
-const MIN_PASSWORD = 4
+const MIN_PASSWORD = 6
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -38,7 +38,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: `密码至少 ${MIN_PASSWORD} 位` })
   }
   if (isDisallowedEmail(email)) {
-    throw createError({ statusCode: 400, statusMessage: '该邮箱地址不允许注册' })
+    throw createError({ statusCode: 403, statusMessage: '该邮箱地址不允许注册' })
   }
   if (UsersRepository.findByEmail(email)) {
     throw createError({ statusCode: 409, statusMessage: '该邮箱已注册' })

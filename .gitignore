@@ -152,3 +152,5 @@ records/
 *.db-journal
 *.db-wal
 *.db-shm
+
+.mcp.json
