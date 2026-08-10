@@ -26,8 +26,6 @@ export const env = {
   ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
   ffprobePath: process.env.FFPROBE_PATH || 'ffprobe',
 
-  /** Socket.IO standalone fallback port */
-  socketPort: Number(process.env.SOCKET_PORT || '3001'),
   /** Browser-visible SRS host for playback URLs (LAN/public IP) */
   publicHost: process.env.PUBLIC_HOST || '127.0.0.1',
 } as const

@@ -22,7 +22,7 @@ const ALLOW = [
   '/viewer',
   '/_nuxt/',
   '/__nuxt',
-  '/socket.io/',
+  '/socket/',
   '/favicon.ico',
 ]
 

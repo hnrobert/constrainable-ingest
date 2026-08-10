@@ -6,9 +6,10 @@
 #     ports/localhost. app → http://srs:1985 (API) and rtmp://srs/... (pull);
 #     srs → http://app:3000/api/srs/* (http_hooks).
 #   - Host ports below are published ONLY for things that live OUTSIDE the
-#     containers: the browser (app :3000, Socket.IO :3001, SRS FLV :8080 /
-#     WHEP :1985) and OBS (RTMP :1935). PUBLIC_HOST is the browser-visible host
-#     IP for playback URLs — it is NOT used for inter-container traffic.
+#     containers: the browser (app :3000, which also serves Socket.IO at
+#     /socket.io/, and SRS FLV :8080 / WHEP :1985) and OBS (RTMP :1935).
+#     PUBLIC_HOST is the browser-visible host IP for playback URLs — it is NOT
+#     used for inter-container traffic.
 services:
   app:
     build:
@@ -34,14 +35,11 @@ services:
       FFPROBE_PATH: ffprobe
       # auth
       SESSION_SECRET: ${SESSION_SECRET:-changeme-change-me}
-      # socket.io fallback port
-      SOCKET_PORT: "3001"
     volumes:
       - ../data:/app/data
       - ../records:/app/records
     ports:
-      - "3000:3000"
-      - "3001:3001"   # Socket.IO (standalone, same port in dev + prod)
+      - "3000:3000"   # app + Socket.IO (same origin, /socket.io/)
     networks:
       - ingest
     depends_on:
