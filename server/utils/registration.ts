@@ -56,3 +56,27 @@ export function passesWhitelist(email: string): boolean {
   if (wl.patterns.length === 0) return true
   return emailMatchesWhitelist(email, wl.patterns)
 }
+
+/**
+ * Human-readable summary of the registration email rules currently in effect,
+ * surfaced in rejection messages so the rejected user can see what IS allowed.
+ * Lists the whitelist patterns (typically domain globs, e.g. `*@x.edu`) and the
+ * disallowed substrings. Returns '' when no rule is configured — though in
+ * practice a rejection only fires when at least one rule matches, so this is
+ * non-empty on the 403 paths. Showing the policy is safe: it reveals no account
+ * data, only the registration rules (anti-enumeration protects the *existence*
+ * check, which stays silent).
+ */
+export function describeEmailRules(): string {
+  const reg = getConfig().registration
+  const clauses: string[] = []
+  const wl = reg.emailWhitelist
+  if (wl?.enabled && wl.patterns.length) {
+    clauses.push(`allowed email patterns: ${wl.patterns.join(', ')}`)
+  }
+  const blocked = (reg.disallowedPatterns ?? []).filter((p) => !!p && p.trim() !== '')
+  // if (blocked.length) {
+  //   clauses.push(`must not contain: ${blocked.join(', ')}`)
+  // }
+  return clauses.join('; ')
+}

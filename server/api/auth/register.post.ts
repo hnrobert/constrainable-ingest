@@ -16,6 +16,7 @@ import { createSessionCookie } from '../../utils/session'
 import { audit } from '../../services/audit'
 import {
   EMAIL_RE,
+  describeEmailRules,
   isDisallowedEmail,
   normalizeEmail,
   passesWhitelist,
@@ -38,7 +39,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: `Password must be at least ${MIN_PASSWORD} characters` })
   }
   if (isDisallowedEmail(email)) {
-    throw createError({ statusCode: 403, statusMessage: 'This email address is not allowed to register' })
+    const rules = describeEmailRules()
+    throw createError({ statusCode: 403, statusMessage: `This email address is not allowed to register${rules ? ` (${rules})` : ''}` })
   }
   if (UsersRepository.findByEmail(email)) {
     throw createError({ statusCode: 409, statusMessage: 'This email is already registered' })
@@ -49,7 +51,8 @@ export default defineEventHandler(async (event) => {
   // Non-bootstrap registrations must pass the whitelist and a valid code.
   if (!isFirst) {
     if (!passesWhitelist(email)) {
-      throw createError({ statusCode: 403, statusMessage: 'This email domain is not allowed to register' })
+      const rules = describeEmailRules()
+      throw createError({ statusCode: 403, statusMessage: `This email domain is not allowed to register${rules ? ` (${rules})` : ''}` })
     }
     if (!session || !consumeCode(email, session, code)) {
       throw createError({ statusCode: 400, statusMessage: 'Verification code is invalid or expired' })

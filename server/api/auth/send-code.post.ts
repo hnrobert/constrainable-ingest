@@ -10,6 +10,7 @@ import { randomInt } from 'node:crypto'
 import { UsersRepository } from '../../repositories/users.repository'
 import {
   EMAIL_RE,
+  describeEmailRules,
   isDisallowedEmail,
   normalizeEmail,
   passesWhitelist,
@@ -41,12 +42,23 @@ export default defineEventHandler(async (event) => {
   }
 
   // Disallowed mailing-list addresses never get a code (403, like the verifier).
+  // Surface the rules so the user can self-correct — the policy is not a secret,
+  // and this does not weaken anti-enumeration (the existence check below is still
+  // silent; these rejections are about the email pattern, not account existence).
   if (isDisallowedEmail(email)) {
-    throw createError({ statusCode: 403, statusMessage: 'This email address is not allowed to register' })
+    const rules = describeEmailRules()
+    throw createError({
+      statusCode: 403,
+      statusMessage: `This email address is not allowed to register${rules ? ` (${rules})` : ''}`,
+    })
   }
   // Domain whitelist (bootstrap is exempt — handled above).
   if (!passesWhitelist(email)) {
-    throw createError({ statusCode: 403, statusMessage: 'This email domain is not allowed to register' })
+    const rules = describeEmailRules()
+    throw createError({
+      statusCode: 403,
+      statusMessage: `This email domain is not allowed to register${rules ? ` (${rules})` : ''}`,
+    })
   }
   // Don't reveal whether an account already exists (anti-enumeration), and don't
   // spam existing users — return the same OK the success path does (verifier parity).
