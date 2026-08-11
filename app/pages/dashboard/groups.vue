@@ -4,6 +4,7 @@ import type { GroupView, InviteLinkView, InviteLinkInput } from '#shared/groups'
 definePageMeta({ layout: 'default' })
 
 const toast = useToast()
+const confirm = useConfirm()
 const { data: groups, refresh: refreshGroups } = await useFetch<GroupView[]>('/api/groups')
 const { data: invites, refresh: refreshInvites } = await useFetch<InviteLinkView[]>('/api/invite-links')
 
@@ -62,15 +63,20 @@ async function saveEdit(g: GroupView): Promise<void> {
     toast.error('Update failed: ' + (e?.data?.statusMessage || e?.message || ''))
   }
 }
-async function removeGroup(g: GroupView): Promise<void> {
-  if (!confirm(`Delete group "${g.name}"? This removes it from all events and members.`)) return
-  try {
-    await $fetch(`/api/groups/${g.id}`, { method: 'DELETE' })
-    toast.success('Group deleted')
-    await reloadAll()
-  } catch (e: any) {
-    toast.error('Delete failed: ' + (e?.data?.statusMessage || e?.message || ''))
-  }
+function removeGroup(g: GroupView): void {
+  confirm.ask(
+    `Delete group "${g.name}"? This removes it from all events and members.`,
+    async () => {
+      try {
+        await $fetch(`/api/groups/${g.id}`, { method: 'DELETE' })
+        toast.success('Group deleted')
+        await reloadAll()
+      } catch (e: any) {
+        toast.error('Delete failed: ' + (e?.data?.statusMessage || e?.message || ''))
+      }
+    },
+    { actionLabel: 'Delete' },
+  )
 }
 
 // --- Invite links ---------------------------------------------------------
@@ -138,15 +144,20 @@ async function copyInvite(url: string): Promise<void> {
     toast.error('Copy failed — select and copy manually')
   }
 }
-async function removeInvite(inv: InviteLinkView): Promise<void> {
-  if (!confirm(`Delete invite link for ${inv.groupName}?`)) return
-  try {
-    await $fetch(`/api/invite-links/${inv.id}`, { method: 'DELETE' })
-    toast.success('Invite link deleted')
-    await reloadAll()
-  } catch (e: any) {
-    toast.error('Delete failed: ' + (e?.data?.statusMessage || e?.message || ''))
-  }
+function removeInvite(inv: InviteLinkView): void {
+  confirm.ask(
+    `Delete invite link for ${inv.groupName}?`,
+    async () => {
+      try {
+        await $fetch(`/api/invite-links/${inv.id}`, { method: 'DELETE' })
+        toast.success('Invite link deleted')
+        await reloadAll()
+      } catch (e: any) {
+        toast.error('Delete failed: ' + (e?.data?.statusMessage || e?.message || ''))
+      }
+    },
+    { actionLabel: 'Delete' },
+  )
 }
 
 // --- Formatting helpers ---------------------------------------------------
@@ -155,8 +166,7 @@ function fmtDate(ms: number): string {
 }
 function fmtExpires(ms: number | null): string {
   if (!ms) return 'never'
-  const d = new Date(ms)
-  return d.toLocaleString('en-US', { hour12: false })
+  return new Date(ms).toLocaleString('en-US', { hour12: false })
 }
 function isExpired(ms: number | null): boolean {
   return ms != null && ms < Date.now()
@@ -164,140 +174,157 @@ function isExpired(ms: number | null): boolean {
 </script>
 
 <template>
-  <div class="stack">
-    <div>
-      <h1>Groups &amp; invites</h1>
-      <p class="muted">
+  <div class="space-y-6">
+    <div class="space-y-1">
+      <h1 class="text-2xl font-semibold">Groups &amp; invites</h1>
+      <p class="text-muted-foreground">
         Organize users into groups, then restrict events to specific groups. Invite links let new
         registrants or existing users join a group automatically.
       </p>
     </div>
 
     <!-- Groups -->
-    <section class="card">
-      <div class="between">
-        <h2>Groups</h2>
-      </div>
-      <table v-if="groups && groups.length">
-        <thead>
-          <tr><th>Name</th><th>Description</th><th>Members</th><th>Created</th><th></th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="g in groups" :key="g.id">
-            <template v-if="editId === g.id">
-              <td><input v-model="editName" /></td>
-              <td><input v-model="editDesc" placeholder="optional" /></td>
-              <td class="muted">{{ g.memberCount }}</td>
-              <td></td>
-              <td class="actions">
-                <button class="primary" @click="saveEdit(g)">Save</button>
-                <button @click="cancelEdit">Cancel</button>
-              </td>
-            </template>
-            <template v-else>
-              <td><strong>{{ g.name }}</strong></td>
-              <td class="muted">{{ g.description || '—' }}</td>
-              <td>{{ g.memberCount }}</td>
-              <td class="muted small">{{ fmtDate(g.createdAt) }}</td>
-              <td class="actions">
-                <button @click="startEdit(g)">Edit</button>
-                <button class="danger" @click="removeGroup(g)">Delete</button>
-              </td>
-            </template>
-          </tr>
-        </tbody>
-      </table>
-      <p v-else class="muted empty">No groups yet.</p>
+    <Card>
+      <CardHeader><CardTitle>Groups</CardTitle></CardHeader>
+      <CardContent class="space-y-4">
+        <Table v-if="groups && groups.length">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead>Members</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead class="w-0" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="g in groups" :key="g.id">
+              <template v-if="editId === g.id">
+                <TableCell><Input v-model="editName" /></TableCell>
+                <TableCell><Input v-model="editDesc" placeholder="optional" /></TableCell>
+                <TableCell class="text-muted-foreground">{{ g.memberCount }}</TableCell>
+                <TableCell />
+                <TableCell>
+                  <div class="flex justify-end gap-2">
+                    <Button size="sm" @click="saveEdit(g)">Save</Button>
+                    <Button size="sm" variant="outline" @click="cancelEdit">Cancel</Button>
+                  </div>
+                </TableCell>
+              </template>
+              <template v-else>
+                <TableCell class="font-medium">{{ g.name }}</TableCell>
+                <TableCell class="text-muted-foreground">{{ g.description || '—' }}</TableCell>
+                <TableCell>{{ g.memberCount }}</TableCell>
+                <TableCell class="text-xs text-muted-foreground">{{ fmtDate(g.createdAt) }}</TableCell>
+                <TableCell>
+                  <div class="flex justify-end gap-2">
+                    <Button size="sm" variant="outline" @click="startEdit(g)">Edit</Button>
+                    <Button size="sm" variant="destructive" @click="removeGroup(g)">Delete</Button>
+                  </div>
+                </TableCell>
+              </template>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <p v-else class="p-6 text-center text-muted-foreground">No groups yet.</p>
 
-      <div class="create-row">
-        <input v-model="newGroupName" placeholder="New group name" @keyup.enter="createGroup" />
-        <input v-model="newGroupDesc" placeholder="Description (optional)" />
-        <button class="primary" :disabled="creatingGroup" @click="createGroup">
-          {{ creatingGroup ? 'Adding…' : 'Add group' }}
-        </button>
-      </div>
-    </section>
+        <div class="flex flex-wrap items-center gap-2">
+          <Input v-model="newGroupName" placeholder="New group name" class="min-w-[180px] flex-1" @keyup.enter="createGroup" />
+          <Input v-model="newGroupDesc" placeholder="Description (optional)" class="min-w-[180px] flex-1" />
+          <Button :disabled="creatingGroup" @click="createGroup">
+            {{ creatingGroup ? 'Adding…' : 'Add group' }}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- Invite links -->
-    <section class="card">
-      <div class="between">
-        <h2>Invite links</h2>
-      </div>
-
-      <div v-if="lastInviteUrl" class="badge ok invite-banner">
-        <span>New link created — copy it now (shown once):</span>
-        <code>{{ lastInviteUrl }}</code>
-        <button class="linkish" @click="copyInvite(lastInviteUrl)">Copy</button>
-      </div>
-
-      <table v-if="invites && invites.length">
-        <thead>
-          <tr><th>Group</th><th>Uses</th><th>Expires</th><th>State</th><th>Note</th><th>Created</th><th></th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="inv in invites" :key="inv.id">
-            <td><strong>{{ inv.groupName }}</strong></td>
-            <td>{{ inv.usedCount }}{{ inv.maxUses != null ? ' / ' + inv.maxUses : ' / ∞' }}</td>
-            <td class="muted small">{{ fmtExpires(inv.expiresAt) }}</td>
-            <td>
-              <span v-if="!inv.active" class="badge danger">inactive</span>
-              <span v-else-if="isExpired(inv.expiresAt)" class="badge danger">expired</span>
-              <span v-else-if="inv.maxUses != null && inv.usedCount >= inv.maxUses" class="badge warn">exhausted</span>
-              <span v-else class="badge ok">active</span>
-            </td>
-            <td class="muted small">{{ inv.note || '—' }}</td>
-            <td class="muted small">{{ fmtDate(inv.createdAt) }}</td>
-            <td class="actions">
-              <button class="linkish" @click="copyInvite(inviteUrl(inv.code))">Copy link</button>
-              <button class="danger" @click="removeInvite(inv)">Delete</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <p v-else class="muted empty">No invite links yet.</p>
-
-      <div class="create-grid" v-if="groups && groups.length">
-        <label class="field">
-          <span class="field-label">Target group</span>
-          <select v-model="inviteGroupId">
-            <option :value="null" disabled>Select a group…</option>
-            <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
-          </select>
-        </label>
-        <label class="field">
-          <span class="field-label">Max uses (blank = unlimited)</span>
-          <input v-model="inviteMaxUses" inputmode="numeric" placeholder="∞" />
-        </label>
-        <label class="field">
-          <span class="field-label">Expires in (hours, blank = never)</span>
-          <input v-model="inviteTtlHours" inputmode="decimal" placeholder="24" />
-        </label>
-        <label class="field">
-          <span class="field-label">Note (optional)</span>
-          <input v-model="inviteNote" placeholder="e.g. Spring cohort" />
-        </label>
-        <div class="create-actions">
-          <button class="primary" :disabled="creatingInvite" @click="createInvite">
-            {{ creatingInvite ? 'Creating…' : 'Create invite link' }}
-          </button>
+    <Card>
+      <CardHeader><CardTitle>Invite links</CardTitle></CardHeader>
+      <CardContent class="space-y-4">
+        <div
+          v-if="lastInviteUrl"
+          class="flex flex-col items-start gap-1.5 rounded-md border border-ok/50 p-3 text-sm text-ok"
+        >
+          <span>New link created — copy it now (shown once):</span>
+          <code class="break-all text-xs">{{ lastInviteUrl }}</code>
+          <Button variant="link" class="h-auto p-0 text-xs" @click="copyInvite(lastInviteUrl)">Copy</Button>
         </div>
-      </div>
-      <p v-else class="muted small">Create a group first before generating invite links.</p>
-    </section>
+
+        <Table v-if="invites && invites.length">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Group</TableHead>
+              <TableHead>Uses</TableHead>
+              <TableHead>Expires</TableHead>
+              <TableHead>State</TableHead>
+              <TableHead>Note</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead class="w-0" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="inv in invites" :key="inv.id">
+              <TableCell class="font-medium">{{ inv.groupName }}</TableCell>
+              <TableCell>{{ inv.usedCount }}{{ inv.maxUses != null ? ' / ' + inv.maxUses : ' / ∞' }}</TableCell>
+              <TableCell class="text-xs text-muted-foreground">{{ fmtExpires(inv.expiresAt) }}</TableCell>
+              <TableCell>
+                <Badge v-if="!inv.active" variant="destructive">inactive</Badge>
+                <Badge v-else-if="isExpired(inv.expiresAt)" variant="destructive">expired</Badge>
+                <Badge v-else-if="inv.maxUses != null && inv.usedCount >= inv.maxUses" variant="warning">exhausted</Badge>
+                <Badge v-else variant="success">active</Badge>
+              </TableCell>
+              <TableCell class="text-xs text-muted-foreground">{{ inv.note || '—' }}</TableCell>
+              <TableCell class="text-xs text-muted-foreground">{{ fmtDate(inv.createdAt) }}</TableCell>
+              <TableCell>
+                <div class="flex justify-end gap-2">
+                  <Button variant="link" class="h-auto p-0 text-xs" @click="copyInvite(inviteUrl(inv.code))">Copy link</Button>
+                  <Button size="sm" variant="destructive" @click="removeInvite(inv)">Delete</Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <p v-else class="p-6 text-center text-muted-foreground">No invite links yet.</p>
+
+        <div v-if="groups && groups.length" class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] items-end gap-3">
+          <div class="space-y-1.5">
+            <Label>Target group</Label>
+            <Select v-model="inviteGroupId">
+              <SelectTrigger class="w-full"><SelectValue placeholder="Select a group…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="space-y-1.5">
+            <Label>Max uses (blank = unlimited)</Label>
+            <Input v-model="inviteMaxUses" inputmode="numeric" placeholder="∞" />
+          </div>
+          <div class="space-y-1.5">
+            <Label>Expires in (hours, blank = never)</Label>
+            <Input v-model="inviteTtlHours" inputmode="decimal" placeholder="24" />
+          </div>
+          <div class="space-y-1.5">
+            <Label>Note (optional)</Label>
+            <Input v-model="inviteNote" placeholder="e.g. Spring cohort" />
+          </div>
+          <div class="col-span-full">
+            <Button :disabled="creatingInvite" @click="createInvite">
+              {{ creatingInvite ? 'Creating…' : 'Create invite link' }}
+            </Button>
+          </div>
+        </div>
+        <p v-else class="text-xs text-muted-foreground">Create a group first before generating invite links.</p>
+      </CardContent>
+    </Card>
+
+    <ConfirmDialog
+      v-model:open="confirm.state.open"
+      :message="confirm.state.message"
+      :action-label="confirm.state.actionLabel"
+      :destructive="confirm.state.destructive"
+      @accept="confirm.accept"
+    />
   </div>
 </template>
-
-<style scoped>
-.create-row { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
-.create-row input { flex: 1 1 180px; }
-.create-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-top: 1rem; align-items: end; }
-.create-actions { grid-column: 1 / -1; }
-.field { display: flex; flex-direction: column; gap: 0.25rem; }
-.field-label { font-size: 0.78rem; color: var(--muted); }
-.actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
-.linkish { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.78rem; padding: 0; }
-.invite-banner { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1rem; align-items: flex-start; }
-.invite-banner code { word-break: break-all; font-size: 0.82rem; }
-.small { font-size: 0.78rem; }
-.empty { padding: 1.5rem; text-align: center; }
-</style>

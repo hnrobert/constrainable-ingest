@@ -19,10 +19,22 @@
  */
 import { Database } from 'bun:sqlite'
 import { drizzle, type BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite'
+import { isTable } from 'drizzle-orm'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import * as schema from './schema'
 import { env } from '../utils/env'
+
+/**
+ * Every table name declared in schema.ts, read at module load. drizzle-kit push
+ * exits 0 even when it silently aborts on a schema conflict that needs a TTY
+ * (column rename/type change with data) — it prints "Interactive prompts
+ * require a TTY" and applies nothing. So an exit-code check alone can't tell
+ * sync from no-op. We verify against this list instead.
+ */
+const SCHEMA_TABLE_NAMES: string[] = (Object.values(schema) as unknown[])
+  .map((t) => (isTable(t) ? (t as unknown as Record<symbol, string>)[Symbol.for('drizzle:Name')] : undefined))
+  .filter((n): n is string => typeof n === 'string')
 
 export type DB = BunSQLiteDatabase<typeof schema>
 
@@ -53,6 +65,28 @@ function syncSchema(): void {
 }
 
 /**
+ * Confirm every schema.ts table actually exists in the live DB. Catches the
+ * silent-abort case described above: push returns exit 0 but a conflict (column
+ * rename, type change) blocked the DDL, leaving tables missing. Rather than
+ * serving 500s from the first handler that touches a missing table, fail the
+ * boot loudly with the exact remediation.
+ */
+function verifySchema(sqlite: Database): void {
+  const rows = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+    .all() as { name: string }[]
+  const live = new Set(rows.map((r) => r.name))
+  const missing = SCHEMA_TABLE_NAMES.filter((n) => !live.has(n))
+  if (missing.length > 0) {
+    throw new Error(
+      `[db] schema sync produced no error but table(s) still missing: ${missing.join(', ')}. ` +
+        `drizzle-kit push likely aborted on a conflict needing a TTY. ` +
+        `Run \`bun run db:push\` in your terminal to resolve interactively, then restart.`,
+    )
+  }
+}
+
+/**
  * Idempotent data fixes that `drizzle-kit push` (pure DDL) can't express. Each
  * step guards on the current row state so it's a no-op once applied. Runs on
  * the raw sqlite handle right after syncSchema(), once per process.
@@ -80,6 +114,7 @@ function createClient(): DB {
   // Tables must exist before this client is handed out (see file header).
   if (!globalForDb.__ingestDbReady) {
     syncSchema()
+    verifySchema(sqlite)
     runDataMigrations(sqlite)
     globalForDb.__ingestDbReady = true
   }

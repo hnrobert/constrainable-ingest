@@ -74,130 +74,122 @@ async function sendTest(): Promise<void> {
 </script>
 
 <template>
-  <div class="stack">
-    <div class="between">
-      <div>
-        <h1>Mail Configuration</h1>
-        <p class="muted">Used to send registration verification codes and system notifications. Configuration is stored in the database (not environment variables).</p>
+  <div class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div class="space-y-1">
+        <h1 class="text-2xl font-semibold">Mail Configuration</h1>
+        <p class="text-muted-foreground">Used to send registration verification codes and system notifications. Configuration is stored in the database (not environment variables).</p>
       </div>
-      <div class="row">
-        <span v-if="dirty" class="badge warn">Unsaved changes</span>
-        <button class="primary" :disabled="!dirty || saving" @click="save">
+      <div class="flex flex-wrap items-center gap-3">
+        <Badge v-if="dirty" variant="warning">Unsaved changes</Badge>
+        <Button :disabled="!dirty || saving" @click="save">
           {{ saving ? 'Saving…' : 'Save' }}
-        </button>
+        </Button>
       </div>
     </div>
 
-    <div class="grid">
-      <section class="card">
-        <h2>Delivery Method</h2>
-        <div class="fields">
-          <label class="field">
-            <span class="field-label">Provider</span>
-            <select v-model="form.provider">
-              <option value="smtp">SMTP (direct connection to mail server, recommended)</option>
-              <option value="post">HTTP Webhook (forward to downstream automation/mail service)</option>
-            </select>
-          </label>
-        </div>
-      </section>
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] items-start gap-4">
+      <Card>
+        <CardHeader><CardTitle>Delivery Method</CardTitle></CardHeader>
+        <CardContent>
+          <div class="space-y-1.5">
+            <Label>Provider</Label>
+            <Select v-model="form.provider">
+              <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="smtp">SMTP (direct connection to mail server, recommended)</SelectItem>
+                <SelectItem value="post">HTTP Webhook (forward to downstream automation/mail service)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
-      <section v-if="form.provider === 'smtp'" class="card">
-        <h2>SMTP</h2>
-        <div class="fields">
-          <label class="field">
-            <span class="field-label">Server (host)</span>
-            <input v-model="form.host" placeholder="smtp.example.com" />
-          </label>
-          <label class="field">
-            <span class="field-label">Port</span>
-            <input v-model.number="form.port" type="number" />
-          </label>
-          <label class="field field-bool">
-            <input v-model="form.useSsl" type="checkbox" />
-            <span>Implicit TLS (SSL) <small class="muted">— direct TLS, typically port 465</small></span>
-          </label>
-          <label class="field field-bool">
-            <input v-model="form.useTls" type="checkbox" />
-            <span>STARTTLS <small class="muted">— upgrade to TLS, typically port 587/25</small></span>
-          </label>
-          <label class="field field-bool">
-            <input v-model="form.usePassword" type="checkbox" />
-            <span>Requires login authentication</span>
-          </label>
-          <label class="field">
-            <span class="field-label">Sender email (login account)</span>
-            <input v-model="form.senderEmail" placeholder="noreply@example.com" />
-          </label>
-          <label class="field">
-            <span class="field-label">Sender display name</span>
-            <input v-model="form.senderDisplay" placeholder="Proctoring Ingest Platform" />
-          </label>
-          <label class="field">
-            <span class="field-label">Sender domain (Message-ID, optional)</span>
-            <input v-model="form.senderDomain" placeholder="example.com" />
-          </label>
-          <label class="field">
-            <span class="field-label">
+      <Card v-if="form.provider === 'smtp'">
+        <CardHeader><CardTitle>SMTP</CardTitle></CardHeader>
+        <CardContent class="space-y-3">
+          <div class="space-y-1.5">
+            <Label>Server (host)</Label>
+            <Input v-model="form.host" placeholder="smtp.example.com" />
+          </div>
+          <div class="space-y-1.5">
+            <Label>Port</Label>
+            <Input v-model.number="form.port" type="number" />
+          </div>
+          <div class="flex items-center gap-2">
+            <Checkbox v-model="form.useSsl" />
+            <span class="text-sm">Implicit TLS (SSL) <span class="text-muted-foreground">— direct TLS, typically port 465</span></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <Checkbox v-model="form.useTls" />
+            <span class="text-sm">STARTTLS <span class="text-muted-foreground">— upgrade to TLS, typically port 587/25</span></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <Checkbox v-model="form.usePassword" />
+            <span class="text-sm">Requires login authentication</span>
+          </div>
+          <div class="space-y-1.5">
+            <Label>Sender email (login account)</Label>
+            <Input v-model="form.senderEmail" placeholder="noreply@example.com" />
+          </div>
+          <div class="space-y-1.5">
+            <Label>Sender display name</Label>
+            <Input v-model="form.senderDisplay" placeholder="Proctoring Ingest Platform" />
+          </div>
+          <div class="space-y-1.5">
+            <Label>Sender domain (Message-ID, optional)</Label>
+            <Input v-model="form.senderDomain" placeholder="example.com" />
+          </div>
+          <div class="space-y-1.5">
+            <Label>
               SMTP password
-              <small v-if="hasPassword" class="muted">(set; leave blank to keep unchanged)</small>
-            </span>
-            <input v-model="senderPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep unchanged" />
-          </label>
-        </div>
-      </section>
+              <span v-if="hasPassword" class="text-muted-foreground">(set; leave blank to keep unchanged)</span>
+            </Label>
+            <Input v-model="senderPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep unchanged" />
+          </div>
+        </CardContent>
+      </Card>
 
-      <section v-if="form.provider === 'post'" class="card">
-        <h2>HTTP Webhook</h2>
-        <div class="fields">
-          <label class="field">
-            <span class="field-label">Webhook URL</span>
-            <input v-model="form.postUrl" placeholder="https://..." />
-          </label>
-          <label class="field">
-            <span class="field-label">Data format</span>
-            <select v-model="form.postSchema">
-              <option value="smtogo">smtogo ({ from, to, subject, html })</option>
-              <option value="powerautomate">Power Automate ({ email, content, subject })</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="field-label">
+      <Card v-if="form.provider === 'post'">
+        <CardHeader><CardTitle>HTTP Webhook</CardTitle></CardHeader>
+        <CardContent class="space-y-3">
+          <div class="space-y-1.5">
+            <Label>Webhook URL</Label>
+            <Input v-model="form.postUrl" placeholder="https://..." />
+          </div>
+          <div class="space-y-1.5">
+            <Label>Data format</Label>
+            <Select v-model="form.postSchema">
+              <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="smtogo">smtogo ({ from, to, subject, html })</SelectItem>
+                <SelectItem value="powerautomate">Power Automate ({ email, content, subject })</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="space-y-1.5">
+            <Label>
               Bearer Token (auth, optional)
-              <small v-if="hasPostAuthToken" class="muted">(set; leave blank to keep unchanged)</small>
-            </span>
-            <input v-model="postAuthToken" type="password" autocomplete="new-password" placeholder="Leave blank to keep unchanged" />
-          </label>
-        </div>
-      </section>
+              <span v-if="hasPostAuthToken" class="text-muted-foreground">(set; leave blank to keep unchanged)</span>
+            </Label>
+            <Input v-model="postAuthToken" type="password" autocomplete="new-password" placeholder="Leave blank to keep unchanged" />
+          </div>
+        </CardContent>
+      </Card>
 
-      <section class="card">
-        <h2>Send Test</h2>
-        <div class="fields">
-          <p class="muted">Send a test email to the specified address using the current configuration (limit: 1/min, 10/day).</p>
-          <label class="field">
-            <span class="field-label">Test recipient</span>
-            <input v-model="testTo" type="email" placeholder="you@example.com" />
-          </label>
-          <button :disabled="testing" @click="sendTest">
+      <Card>
+        <CardHeader><CardTitle>Send Test</CardTitle></CardHeader>
+        <CardContent class="space-y-3">
+          <p class="text-sm text-muted-foreground">Send a test email to the specified address using the current configuration (limit: 1/min, 10/day).</p>
+          <div class="space-y-1.5">
+            <Label>Test recipient</Label>
+            <Input v-model="testTo" type="email" placeholder="you@example.com" />
+          </div>
+          <Button variant="outline" :disabled="testing" @click="sendTest">
             {{ testing ? 'Sending…' : 'Send test email' }}
-          </button>
-        </div>
-      </section>
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   </div>
 </template>
-
-<style scoped>
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1rem;
-  align-items: start;
-}
-.fields { display: flex; flex-direction: column; gap: 0.75rem; }
-.field { display: flex; flex-direction: column; gap: 0.25rem; }
-.field-label { font-size: 0.8rem; color: var(--muted); }
-.field-bool { flex-direction: row; align-items: center; gap: 0.5rem; }
-.field-bool input { width: auto; }
-</style>

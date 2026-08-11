@@ -47,40 +47,41 @@ function goSignIn(): void {
 </script>
 
 <template>
-  <section class="invite">
-    <div v-if="!code" class="card">
-      <p class="muted">No invite code provided.</p>
-    </div>
+  <section class="mx-auto w-full max-w-md space-y-4">
+    <Card v-if="!code">
+      <CardContent class="pt-6">
+        <p class="text-muted-foreground">No invite code provided.</p>
+      </CardContent>
+    </Card>
 
     <!-- Already joined (or already a member — idempotent success). -->
-    <div v-else-if="joined" class="card success">
-      <h1>You're in 🎉</h1>
-      <p>You joined the group <strong>{{ joined.groupName }}</strong>.</p>
-      <p class="muted">Events restricted to this group will now appear on your dashboard.</p>
-      <NuxtLink to="/dashboard" class="primary">Go to dashboard</NuxtLink>
-    </div>
+    <Card v-else-if="joined" class="border-ok/50">
+      <CardHeader><CardTitle>You're in 🎉</CardTitle></CardHeader>
+      <CardContent class="space-y-3">
+        <p>You joined the group <strong>{{ joined.groupName }}</strong>.</p>
+        <p class="text-sm text-muted-foreground">Events restricted to this group will now appear on your dashboard.</p>
+        <Button as-child><NuxtLink to="/dashboard">Go to dashboard</NuxtLink></Button>
+      </CardContent>
+    </Card>
 
     <!-- Logged-in user: claim directly. -->
-    <div v-else-if="user" class="card">
-      <h1>Join a group</h1>
-      <p>Sign in user <strong>{{ user.email }}</strong> — claim this invite to join its group.</p>
-      <button class="primary" :disabled="claiming" @click="claim">
-        {{ claiming ? 'Claiming…' : 'Join group' }}
-      </button>
-    </div>
+    <Card v-else-if="user">
+      <CardHeader><CardTitle>Join a group</CardTitle></CardHeader>
+      <CardContent class="space-y-3">
+        <p>Signed in as <strong>{{ user.email }}</strong> — claim this invite to join its group.</p>
+        <Button :disabled="claiming" @click="claim">
+          {{ claiming ? 'Claiming…' : 'Join group' }}
+        </Button>
+      </CardContent>
+    </Card>
 
     <!-- Not logged in: stash the invite, send to auth. -->
-    <div v-else class="card">
-      <h1>You're invited</h1>
-      <p>Register or sign in to accept this invite and join its group.</p>
-      <button class="primary" @click="goSignIn">Sign in / Register</button>
-    </div>
+    <Card v-else>
+      <CardHeader><CardTitle>You're invited</CardTitle></CardHeader>
+      <CardContent class="space-y-3">
+        <p>Register or sign in to accept this invite and join its group.</p>
+        <Button @click="goSignIn">Sign in / Register</Button>
+      </CardContent>
+    </Card>
   </section>
 </template>
-
-<style scoped>
-.invite { max-width: 420px; }
-.invite .card { display: flex; flex-direction: column; gap: 0.75rem; }
-.invite h1 { font-size: 1.4rem; margin: 0; }
-.success { border-color: var(--ok, #2ea043); }
-</style>

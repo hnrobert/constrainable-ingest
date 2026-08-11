@@ -1,67 +1,162 @@
 <script setup lang="ts">
-// Dashboard shell. Nav is role-aware: both roles see Dashboard + Events (their
-// authorized catalog); management pages are admin-only. Brand links to the
-// public homepage. The server middleware + requireAdmin are the real gates;
-// this nav just hides unreachable routes from regular users.
+import type { Component } from 'vue'
+import {
+  LayoutDashboard,
+  CalendarDays,
+  Radio,
+  Film,
+  Users,
+  UsersRound,
+  Settings,
+  Mail,
+  ScrollText,
+  LogOut,
+  Menu,
+  X,
+  Sun,
+  Moon,
+} from 'lucide-vue-next'
+
+// Dashboard shell with a left vertical sidebar (mirrors verifier-gateway's
+// hand-rolled sidebar layout). Nav is role-aware: both roles see Dashboard +
+// Events; management pages are admin-only. The server middleware +
+// requireAdmin are the real gates; this nav only hides unreachable routes.
 const { user, logout } = useAuth()
+const route = useRoute()
 const isAdmin = computed(() => user.value?.role === 'admin')
 
-const baseNav: { label: string; to: string }[] = [
-  { label: 'Dashboard', to: '/dashboard' },
-  { label: 'Events', to: '/dashboard/events' },
+// `useDark` toggles the `.dark` class on <html> and persists the choice under
+// 'ci.theme' (read pre-paint by the no-FOUC head script). First visit follows
+// the OS preference (mode 'auto').
+const isDark = useDark({ storageKey: 'ci.theme' })
+const sidebarOpen = ref(false)
+
+interface NavItem {
+  label: string
+  to: string
+  icon: Component
+  admin?: boolean
+}
+
+const navItems: NavItem[] = [
+  { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
+  { label: 'Events', to: '/dashboard/events', icon: CalendarDays },
+  { label: 'Live', to: '/dashboard/streams', icon: Radio, admin: true },
+  { label: 'Recordings', to: '/dashboard/recordings', icon: Film, admin: true },
+  { label: 'Users', to: '/dashboard/users', icon: Users, admin: true },
+  { label: 'Groups', to: '/dashboard/groups', icon: UsersRound, admin: true },
+  { label: 'Config', to: '/dashboard/config', icon: Settings, admin: true },
+  { label: 'Mail', to: '/dashboard/mail', icon: Mail, admin: true },
+  { label: 'Audit', to: '/dashboard/audit', icon: ScrollText, admin: true },
 ]
-const adminNav: { label: string; to: string }[] = [
-  { label: 'Live', to: '/dashboard/streams' },
-  { label: 'Recordings', to: '/dashboard/recordings' },
-  { label: 'Users', to: '/dashboard/users' },
-  { label: 'Groups', to: '/dashboard/groups' },
-  { label: 'Config', to: '/dashboard/config' },
-  { label: 'Mail', to: '/dashboard/mail' },
-  { label: 'Audit', to: '/dashboard/audit' },
-]
-const nav = computed(() => (isAdmin.value ? [...baseNav, ...adminNav] : baseNav))
+
+const visibleNav = computed(() => navItems.filter((n) => !n.admin || isAdmin.value))
+
+// '/dashboard' is a prefix of every dashboard route, so only highlight it on an
+// exact match; every other item matches itself + its sub-paths.
+function isActive(to: string): boolean {
+  return to === '/dashboard'
+    ? route.path === '/dashboard'
+    : route.path === to || route.path.startsWith(to + '/')
+}
+
+function toggleTheme(): void {
+  isDark.value = !isDark.value
+}
+
+// Close the mobile drawer whenever the route changes.
+watch(
+  () => route.path,
+  () => {
+    sidebarOpen.value = false
+  },
+)
 </script>
 
 <template>
-  <div class="app-shell">
-    <header class="app-header">
-      <NuxtLink to="/" class="brand">Constrainable Ingest</NuxtLink>
-      <nav class="app-nav">
-        <NuxtLink v-for="item in nav" :key="item.to" :to="item.to">{{ item.label }}</NuxtLink>
-      </nav>
-      <div class="app-auth">
-        <span v-if="user" class="app-user">{{ user.email }}</span>
-        <span v-if="user" class="app-role">{{ isAdmin ? 'admin' : 'user' }}</span>
-        <button v-if="user" class="ghost" @click="logout">Sign out</button>
+  <div class="min-h-screen bg-background">
+    <!-- Mobile top bar (sidebar is off-canvas below lg) -->
+    <div
+      class="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-card px-4 lg:hidden"
+    >
+      <Button variant="ghost" size="icon" @click="sidebarOpen = true">
+        <Menu :size="18" />
+      </Button>
+      <NuxtLink to="/" class="font-semibold">Constrainable Ingest</NuxtLink>
+    </div>
+
+    <!-- Mobile overlay -->
+    <div
+      v-if="sidebarOpen"
+      class="fixed inset-0 z-40 bg-black/40 lg:hidden"
+      @click="sidebarOpen = false"
+    />
+
+    <!-- Sidebar -->
+    <aside
+      class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-card transition-transform duration-200 lg:translate-x-0"
+      :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+    >
+      <div class="flex h-14 items-center justify-between border-b px-4">
+        <NuxtLink to="/" class="font-semibold">Constrainable Ingest</NuxtLink>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          class="lg:hidden"
+          @click="sidebarOpen = false"
+        >
+          <X :size="16" />
+        </Button>
       </div>
-    </header>
-    <main class="app-main">
-      <slot />
+
+      <nav class="flex-1 space-y-1 overflow-y-auto p-3">
+        <NuxtLink
+          v-for="item in visibleNav"
+          :key="item.to"
+          :to="item.to"
+          class="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors"
+          :class="
+            isActive(item.to)
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+          "
+        >
+          <component :is="item.icon" :size="16" />
+          {{ item.label }}
+        </NuxtLink>
+      </nav>
+
+      <div class="space-y-2 border-t p-3">
+        <Button variant="ghost" class="w-full justify-start" @click="toggleTheme">
+          <Sun v-if="isDark" :size="16" />
+          <Moon v-else :size="16" />
+          {{ isDark ? 'Light mode' : 'Dark mode' }}
+        </Button>
+
+        <div v-if="user" class="space-y-2">
+          <div
+            class="flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm"
+          >
+            <span class="truncate text-muted-foreground">{{ user.email }}</span>
+            <Badge variant="secondary" class="uppercase">{{ user.role }}</Badge>
+          </div>
+          <Button
+            variant="ghost"
+            class="w-full justify-start text-muted-foreground"
+            @click="logout"
+          >
+            <LogOut :size="16" />
+            Sign out
+          </Button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Content (offset for the fixed sidebar on lg+) -->
+    <main class="lg:pl-64">
+      <div class="mx-auto w-full max-w-4xl p-6">
+        <slot />
+      </div>
     </main>
   </div>
 </template>
-
-<style scoped>
-.app-shell { min-height: 100vh; }
-.app-header {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 0.75rem 1.25rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.brand { font-weight: 600; font-size: 1rem; color: var(--text); }
-.brand:hover { color: var(--primary); }
-.app-nav { display: flex; gap: 1rem; flex-wrap: wrap; }
-.app-nav a { color: var(--muted); font-size: 0.9rem; }
-.app-nav a.router-link-active { color: var(--text); }
-.app-main { padding: 1.25rem; max-width: 1200px; margin: 0 auto; }
-.app-auth { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
-.app-user { font-size: 0.85rem; color: var(--muted); }
-.app-role { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.app-auth .ghost { font-size: 0.8rem; }
-</style>

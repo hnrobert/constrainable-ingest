@@ -118,102 +118,85 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="login-wrap">
-    <form class="login-card card" @submit.prevent="submit">
-      <h1>Constrainable Ingest</h1>
-      <p class="muted">{{ mode === 'login' ? 'Sign in' : 'Register account' }}</p>
-      <p v-if="inviteCode" class="badge ok">Joining via invite — your account will be added to the invite's group.</p>
+  <div class="flex min-h-screen items-center justify-center p-4">
+    <Card class="w-full max-w-sm">
+      <CardContent class="flex flex-col gap-4 pt-6">
+        <div class="space-y-1 text-center">
+          <h1 class="text-xl font-semibold">Constrainable Ingest</h1>
+          <p class="text-sm text-muted-foreground">{{ mode === 'login' ? 'Sign in' : 'Register account' }}</p>
+        </div>
 
-      <div class="tabs">
-        <button type="button" :class="{ active: mode === 'login' }" @click="switchMode('login')">Sign in</button>
-        <button type="button" :class="{ active: mode === 'register' }" @click="switchMode('register')">Register</button>
-      </div>
+        <div
+          v-if="inviteCode"
+          class="rounded-md border border-ok/50 bg-ok/10 p-2.5 text-xs text-ok"
+        >
+          Joining via invite — your account will be added to the invite's group.
+        </div>
 
-      <label class="field">
-        <span class="field-label">Email</span>
-        <input v-model="email" type="email" autocomplete="email" autofocus />
-      </label>
-      <label class="field">
-        <span class="field-label">Password</span>
-        <input v-model="password" type="password" autocomplete="current-password" />
-      </label>
-      <label v-if="mode === 'register'" class="field">
-        <span class="field-label">Confirm password</span>
-        <input v-model="confirm" type="password" autocomplete="new-password" />
-      </label>
+        <!-- Segmented Sign in / Register toggle. -->
+        <div class="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
+          <button
+            type="button"
+            :class="[
+              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              mode === 'login' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+            ]"
+            @click="switchMode('login')"
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            :class="[
+              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              mode === 'register' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+            ]"
+            @click="switchMode('register')"
+          >
+            Register
+          </button>
+        </div>
 
-      <!-- Two-step verification code (skipped for the bootstrap super-admin). -->
-      <div v-if="mode === 'register' && !bootstrap" class="code-row">
-        <label class="field code-field">
-          <span class="field-label">Email verification code</span>
-          <input v-model="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" />
-        </label>
-        <button type="button" class="code-btn" :disabled="sendingCode || cooldown > 0" @click="doSendCode">
-          {{ cooldown > 0 ? `${cooldown}s` : sendingCode ? 'Sending…' : 'Get code' }}
-        </button>
-      </div>
+        <form class="flex flex-col gap-3" @submit.prevent="submit">
+          <div class="space-y-1.5">
+            <Label for="login-email">Email</Label>
+            <Input id="login-email" v-model="email" type="email" autocomplete="email" autofocus />
+          </div>
+          <div class="space-y-1.5">
+            <Label for="login-password">Password</Label>
+            <Input id="login-password" v-model="password" type="password" autocomplete="current-password" />
+          </div>
+          <div v-if="mode === 'register'" class="space-y-1.5">
+            <Label for="login-confirm">Confirm password</Label>
+            <Input id="login-confirm" v-model="confirm" type="password" autocomplete="new-password" />
+          </div>
 
-      <p v-if="mode === 'register'" class="hint muted">
-        <template v-if="bootstrap">
-          No admin exists yet: the first registered user becomes the super admin (no email verification code required). Please use a personal email you can receive mail at.
-        </template>
-        <template v-else>
-          You must first request an email verification code; after registration you become a regular user (event schedule and details only).
-        </template>
-      </p>
+          <!-- Two-step verification code (skipped for the bootstrap super-admin). -->
+          <div v-if="mode === 'register' && !bootstrap" class="flex items-end gap-2">
+            <div class="flex-1 space-y-1.5">
+              <Label for="login-code">Email verification code</Label>
+              <Input id="login-code" v-model="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" />
+            </div>
+            <Button type="button" variant="outline" :disabled="sendingCode || cooldown > 0" @click="doSendCode">
+              {{ cooldown > 0 ? `${cooldown}s` : sendingCode ? 'Sending…' : 'Get code' }}
+            </Button>
+          </div>
 
-      <p v-if="error" class="badge danger">{{ error }}</p>
-      <button class="primary" type="submit" :disabled="loading">
-        {{ loading ? 'Processing…' : mode === 'login' ? 'Sign in' : 'Register' }}
-      </button>
-    </form>
+          <p v-if="mode === 'register'" class="text-xs leading-relaxed text-muted-foreground">
+            <template v-if="bootstrap">
+              No admin exists yet: the first registered user becomes the super admin (no email verification code required). Please use a personal email you can receive mail at.
+            </template>
+            <template v-else>
+              You must first request an email verification code; after registration you become a regular user (event schedule and details only).
+            </template>
+          </p>
+
+          <p v-if="error" class="text-sm font-medium text-destructive">{{ error }}</p>
+          <Button type="submit" :disabled="loading">
+            {{ loading ? 'Processing…' : mode === 'login' ? 'Sign in' : 'Register' }}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   </div>
 </template>
-
-<style scoped>
-.login-wrap {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-}
-.login-card {
-  width: 100%;
-  max-width: 360px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-.login-card h1 { font-size: 1.3rem; margin: 0; }
-.login-card .muted { margin: 0 0 0.5rem; font-size: 0.85rem; }
-.tabs { display: flex; gap: 0.25rem; }
-.tabs button {
-  flex: 1;
-  padding: 0.4rem;
-  font-size: 0.85rem;
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.tabs button.active { color: var(--text); border-color: var(--primary); }
-.field { display: flex; flex-direction: column; gap: 0.25rem; }
-.field-label { font-size: 0.8rem; color: var(--muted); }
-.hint { font-size: 0.78rem; line-height: 1.4; margin: 0; }
-.code-row { display: flex; gap: 0.5rem; align-items: flex-end; }
-.code-field { flex: 1; }
-.code-btn {
-  white-space: nowrap;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--primary);
-  cursor: pointer;
-}
-.code-btn:disabled { opacity: 0.5; cursor: default; }
-button.primary { margin-top: 0.5rem; }
-</style>

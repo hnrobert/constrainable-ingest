@@ -143,107 +143,83 @@ function reset(): void {
 </script>
 
 <template>
-  <div class="stack">
-    <div class="between">
-      <div>
-        <h1>Runtime Configuration</h1>
-        <p class="muted">Hot-reloads on save: new sessions use the new values immediately; active sessions pick them up on the next probe.</p>
+  <div class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div class="space-y-1">
+        <h1 class="text-2xl font-semibold">Runtime Configuration</h1>
+        <p class="text-muted-foreground">Hot-reloads on save: new sessions use the new values immediately; active sessions pick them up on the next probe.</p>
       </div>
-      <div class="row">
-        <span v-if="dirty" class="badge warn">Unsaved changes</span>
-        <button :disabled="!dirty || saving" @click="reset">Revert</button>
-        <button class="primary" :disabled="!dirty || saving" @click="save">
+      <div class="flex flex-wrap items-center gap-3">
+        <Badge v-if="dirty" variant="warning">Unsaved changes</Badge>
+        <Button variant="outline" :disabled="!dirty || saving" @click="reset">Revert</Button>
+        <Button :disabled="!dirty || saving" @click="save">
           {{ saving ? 'Saving…' : 'Save & hot-reload' }}
-        </button>
+        </Button>
       </div>
     </div>
 
-    <div class="grid">
-      <section v-for="s in sections" :key="s.title" class="card">
-        <h2>{{ s.title }}</h2>
-        <div class="fields">
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] items-start gap-4">
+      <Card v-for="s in sections" :key="s.title">
+        <CardHeader><CardTitle>{{ s.title }}</CardTitle></CardHeader>
+        <CardContent class="space-y-3">
           <template v-for="f in s.fields" :key="f.path">
-            <label v-if="f.kind === 'bool'" class="field field-bool">
-              <input
-                type="checkbox"
-                :checked="getPath(form, f.path)"
-                @change="setPath(form, f.path, ($event.target as HTMLInputElement).checked)"
+            <div v-if="f.kind === 'bool'" class="flex items-center gap-2">
+              <Checkbox
+                :model-value="getPath(form, f.path)"
+                @update:model-value="setPath(form, f.path, $event)"
               />
-              <span>
+              <span class="text-sm">
                 {{ f.label }}
-                <small v-if="f.hint" class="muted">— {{ f.hint }}</small>
+                <span v-if="f.hint" class="text-muted-foreground">— {{ f.hint }}</span>
               </span>
-            </label>
+            </div>
 
-            <label v-else class="field">
-              <span class="field-label">{{ f.label }}</span>
-              <select
+            <div v-else class="space-y-1.5">
+              <Label>{{ f.label }}</Label>
+              <Select
                 v-if="f.kind === 'select'"
-                :value="getPath(form, f.path)"
-                @input="onInput(f.path, 'select', ($event.target as HTMLSelectElement).value)"
+                :model-value="getPath(form, f.path)"
+                @update:model-value="onInput(f.path, 'select', $event)"
               >
-                <option v-for="o in f.options" :key="o.value" :value="o.value">{{ o.label }}</option>
-              </select>
-              <input
+                <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="o in f.options" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
                 v-else
                 :type="f.kind === 'number' ? 'number' : 'text'"
-                :value="getPath(form, f.path)"
-                @input="onInput(f.path, f.kind, ($event.target as HTMLInputElement).value)"
+                :model-value="getPath(form, f.path)"
+                @update:model-value="onInput(f.path, f.kind, $event)"
               />
-              <small v-if="f.hint" class="muted field-hint">{{ f.hint }}</small>
-            </label>
+              <p v-if="f.hint" class="text-xs text-muted-foreground">{{ f.hint }}</p>
+            </div>
           </template>
-        </div>
-      </section>
+        </CardContent>
+      </Card>
 
-      <section class="card">
-        <h2>Registration Email Restrictions</h2>
-        <div class="fields">
-          <label class="field field-bool">
-            <input
-              type="checkbox"
-              v-model="form.registration.emailWhitelist.enabled"
-            />
-            <span>Enable email whitelist <small class="muted">— When enabled, only emails matching the wildcards below may register; leave empty to allow all</small></span>
-          </label>
-          <label class="field">
-            <span class="field-label">Allowed email wildcards (one per line)</span>
-            <textarea v-model="whitelistText" rows="4" placeholder="*@nottingham.edu.cn&#10;*@*.nottingham.edu.cn"></textarea>
-            <small class="muted field-hint">picomatch wildcards, e.g. <code>*@nottingham.edu.cn</code>. The first admin registration is exempt.</small>
-          </label>
-          <label class="field">
-            <span class="field-label">Disallowed email patterns (one per line)</span>
-            <textarea v-model="disallowedText" rows="3" placeholder="student&#10;staff"></textarea>
-            <small class="muted field-hint">Emails containing these words (case-insensitive) are always rejected, e.g. institutional mailing lists <code>student</code> / <code>staff</code>.</small>
-          </label>
-        </div>
-      </section>
+      <Card>
+        <CardHeader><CardTitle>Registration Email Restrictions</CardTitle></CardHeader>
+        <CardContent class="space-y-3">
+          <div class="flex items-center gap-2">
+            <Checkbox v-model="form.registration.emailWhitelist.enabled" />
+            <span class="text-sm">
+              Enable email whitelist
+              <span class="text-muted-foreground">— When enabled, only emails matching the wildcards below may register; leave empty to allow all</span>
+            </span>
+          </div>
+          <div class="space-y-1.5">
+            <Label>Allowed email wildcards (one per line)</Label>
+            <Textarea v-model="whitelistText" rows="4" placeholder="*@nottingham.edu.cn&#10;*@*.nottingham.edu.cn" />
+            <p class="text-xs text-muted-foreground">picomatch wildcards, e.g. <code class="rounded bg-muted px-1 text-[0.85em]">*@nottingham.edu.cn</code>. The first admin registration is exempt.</p>
+          </div>
+          <div class="space-y-1.5">
+            <Label>Disallowed email patterns (one per line)</Label>
+            <Textarea v-model="disallowedText" rows="3" placeholder="student&#10;staff" />
+            <p class="text-xs text-muted-foreground">Emails containing these words (case-insensitive) are always rejected, e.g. institutional mailing lists <code class="rounded bg-muted px-1 text-[0.85em]">student</code> / <code class="rounded bg-muted px-1 text-[0.85em]">staff</code>.</p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   </div>
 </template>
-
-<style scoped>
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1rem;
-  align-items: start;
-}
-.fields { display: flex; flex-direction: column; gap: 0.75rem; }
-.field { display: flex; flex-direction: column; gap: 0.25rem; }
-.field-label { font-size: 0.8rem; color: var(--muted); }
-.field-hint { font-size: 0.75rem; }
-.field-bool { flex-direction: row; align-items: center; gap: 0.5rem; }
-.field-bool input { width: auto; }
-textarea {
-  font: inherit;
-  resize: vertical;
-  min-height: 4lh;
-}
-code {
-  background: var(--border);
-  padding: 0 0.25rem;
-  border-radius: 3px;
-  font-size: 0.85em;
-}
-</style>

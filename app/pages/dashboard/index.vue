@@ -17,68 +17,85 @@ const statusLabel: Record<EventStatus, string> = {
   ended: 'Ended',
   archived: 'Archived',
 }
-const statusClass: Record<EventStatus, string> = {
-  draft: 'muted',
-  scheduled: 'warn',
-  live: 'ok',
-  ended: 'muted',
-  archived: 'danger',
+const statusVariant: Record<EventStatus, 'secondary' | 'warning' | 'success' | 'destructive'> = {
+  draft: 'secondary',
+  scheduled: 'warning',
+  live: 'success',
+  ended: 'secondary',
+  archived: 'destructive',
 }
+
+const quickLinks: { to: string; label: string }[] = [
+  { to: '/dashboard/events', label: 'Events' },
+  { to: '/dashboard/streams', label: 'Live streams' },
+  { to: '/dashboard/recordings', label: 'Recordings' },
+  { to: '/dashboard/users', label: 'Users' },
+  { to: '/dashboard/groups', label: 'Groups & invites' },
+  { to: '/dashboard/config', label: 'Config' },
+]
 </script>
 
 <template>
-  <div class="stack">
-    <div>
-      <h1>Dashboard</h1>
-      <p class="muted">
+  <div class="space-y-6">
+    <div class="space-y-1">
+      <h1 class="text-2xl font-semibold">Dashboard</h1>
+      <p class="text-muted-foreground">
         Welcome, {{ user?.email }}.
         <template v-if="isAdmin">You have admin access — full event and system management.</template>
         <template v-else>You can view the schedule and details for events you have access to.</template>
       </p>
     </div>
 
-    <section v-if="isAdmin" class="quick card">
-      <h2>Management</h2>
-      <div class="quick-grid">
-        <NuxtLink to="/dashboard/events" class="quick-link">Events →</NuxtLink>
-        <NuxtLink to="/dashboard/streams" class="quick-link">Live streams →</NuxtLink>
-        <NuxtLink to="/dashboard/recordings" class="quick-link">Recordings →</NuxtLink>
-        <NuxtLink to="/dashboard/users" class="quick-link">Users →</NuxtLink>
-        <NuxtLink to="/dashboard/groups" class="quick-link">Groups &amp; invites →</NuxtLink>
-        <NuxtLink to="/dashboard/config" class="quick-link">Config →</NuxtLink>
-      </div>
-    </section>
+    <Card v-if="isAdmin">
+      <CardHeader><CardTitle>Management</CardTitle></CardHeader>
+      <CardContent>
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
+          <NuxtLink
+            v-for="q in quickLinks"
+            :key="q.to"
+            :to="q.to"
+            class="block rounded-lg border p-3 text-sm transition-colors hover:border-primary hover:text-primary"
+          >
+            {{ q.label }} →
+          </NuxtLink>
+        </div>
+      </CardContent>
+    </Card>
 
-    <section class="card">
-      <div class="between">
-        <h2>{{ isAdmin ? 'All events' : 'Your events' }}</h2>
-        <NuxtLink to="/dashboard/events" class="muted">View all →</NuxtLink>
-      </div>
-      <table v-if="events && events.length">
-        <thead><tr><th>Event</th><th>Status</th><th></th></tr></thead>
-        <tbody>
-          <tr v-for="e in events" :key="e.id">
-            <td>{{ e.name }}</td>
-            <td><span class="badge" :class="statusClass[e.status]">{{ statusLabel[e.status] }}</span></td>
-            <td><NuxtLink :to="`/dashboard/events/${e.id}`"><button>{{ isAdmin ? 'Manage' : 'View' }}</button></NuxtLink></td>
-          </tr>
-        </tbody>
-      </table>
-      <p v-else class="muted empty">No events available.</p>
-    </section>
+    <Card>
+      <CardHeader>
+        <div class="flex items-center justify-between">
+          <CardTitle>{{ isAdmin ? 'All events' : 'Your events' }}</CardTitle>
+          <NuxtLink to="/dashboard/events" class="text-sm text-muted-foreground hover:text-foreground">
+            View all →
+          </NuxtLink>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Table v-if="events && events.length">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Event</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead class="w-0" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="e in events" :key="e.id">
+              <TableCell class="font-medium">{{ e.name }}</TableCell>
+              <TableCell>
+                <Badge :variant="statusVariant[e.status]">{{ statusLabel[e.status] }}</Badge>
+              </TableCell>
+              <TableCell>
+                <Button as-child size="sm">
+                  <NuxtLink :to="`/dashboard/events/${e.id}`">{{ isAdmin ? 'Manage' : 'View' }}</NuxtLink>
+                </Button>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <p v-else class="p-6 text-center text-muted-foreground">No events available.</p>
+      </CardContent>
+    </Card>
   </div>
 </template>
-
-<style scoped>
-.quick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.75rem; }
-.quick-link {
-  display: block;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 0.9rem;
-}
-.quick-link:hover { border-color: var(--primary); color: var(--primary); }
-.empty { padding: 1.5rem; text-align: center; }
-</style>

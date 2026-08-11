@@ -50,44 +50,52 @@ onBeforeUnmount(() => disposeSocket())
 </script>
 
 <template>
-  <div class="stack">
-    <div class="between">
-      <div>
-        <h1>Live Streams</h1>
-        <p class="muted">Active sessions and real-time metrics with instant violation alerts.</p>
+  <div class="space-y-6">
+    <div class="flex items-start justify-between gap-3">
+      <div class="space-y-1">
+        <h1 class="text-2xl font-semibold">Live Streams</h1>
+        <p class="text-muted-foreground">Active sessions and real-time metrics with instant violation alerts.</p>
       </div>
-      <span class="badge" :class="connected ? 'ok' : 'warn'">
+      <Badge :variant="connected ? 'success' : 'warning'">
         {{ connected ? '● Connected' : '○ Connecting…' }}
-      </span>
+      </Badge>
     </div>
 
-    <section class="card">
-      <StreamsActiveTable :sessions="list" @watch="watchStream" />
-    </section>
+    <Card>
+      <CardContent>
+        <StreamsActiveTable :sessions="list" @watch="watchStream" />
+      </CardContent>
+    </Card>
 
-    <section class="card">
-      <h2>Watch Live</h2>
-      <p class="muted small">Click "Watch" in the table above, or enter a stream name to play manually. The browser connects directly to SRS.</p>
-      <div class="row watch-input">
-        <input v-model="manualStream" placeholder="Stream name" @keyup.enter="watchStream(manualStream)" />
-        <button class="primary" @click="watchStream(manualStream)">Play</button>
-        <button v-if="watching" @click="watching = null">Close</button>
-      </div>
-      <StreamsPlayer v-if="watching" :stream-name="watching" />
-    </section>
+    <Card>
+      <CardHeader>
+        <CardTitle>Watch Live</CardTitle>
+        <CardDescription>
+          Click "Watch" in the table above, or enter a stream name to play manually. The browser connects directly to SRS.
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-3">
+        <div class="flex flex-wrap items-center gap-3">
+          <Input
+            v-model="manualStream"
+            placeholder="Stream name"
+            class="max-w-[320px]"
+            @keyup.enter="watchStream(manualStream)"
+          />
+          <Button @click="watchStream(manualStream)">Play</Button>
+          <Button v-if="watching" variant="outline" @click="watching = null">Close</Button>
+        </div>
+        <StreamsPlayer v-if="watching" :stream-name="watching" />
+      </CardContent>
+    </Card>
 
-    <section v-if="lastViolation" class="card violation">
-      <strong>Last violation:</strong>
-      {{ lastViolation.streamName }} —
-      {{ lastViolation.reasons.join('; ') }}
-      <span class="muted">({{ new Date(lastViolation.startedAt).toLocaleTimeString('en-US', { hour12: false }) }})</span>
-    </section>
+    <Card v-if="lastViolation" class="border-destructive">
+      <CardContent class="text-sm">
+        <strong>Last violation:</strong>
+        {{ lastViolation.streamName }} —
+        {{ lastViolation.reasons.join('; ') }}
+        <span class="text-muted-foreground">({{ new Date(lastViolation.startedAt).toLocaleTimeString('en-US', { hour12: false }) }})</span>
+      </CardContent>
+    </Card>
   </div>
 </template>
-
-<style scoped>
-.violation { border-color: var(--danger); }
-.watch-input { gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
-.watch-input input { max-width: 320px; }
-.small { font-size: 0.78rem; }
-</style>

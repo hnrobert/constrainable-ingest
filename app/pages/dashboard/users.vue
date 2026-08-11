@@ -4,6 +4,7 @@ import type { UserWithGroupsView, GroupView } from '#shared/groups'
 definePageMeta({ layout: 'default' })
 
 const toast = useToast()
+const confirm = useConfirm()
 const { data: users, refresh } = await useFetch<UserWithGroupsView[]>('/api/users')
 const { data: groups } = await useFetch<GroupView[]>('/api/groups')
 
@@ -52,75 +53,91 @@ async function save(u: UserWithGroupsView): Promise<void> {
   }
 }
 
-async function toggleRole(u: UserWithGroupsView): Promise<void> {
+function toggleRole(u: UserWithGroupsView): void {
   const next = u.role === 'admin' ? 'user' : 'admin'
-  if (next === 'admin' && !confirm(`Promote ${u.email} to admin?`)) return
-  try {
-    await $fetch(`/api/users/${u.id}`, { method: 'PATCH', body: { role: next } })
-    toast.success(`${u.email} is now ${next}`)
-    await refresh()
-  } catch (e: any) {
-    toast.error('Role change failed: ' + (e?.data?.statusMessage || e?.message || ''))
+  const apply = async () => {
+    try {
+      await $fetch(`/api/users/${u.id}`, { method: 'PATCH', body: { role: next } })
+      toast.success(`${u.email} is now ${next}`)
+      await refresh()
+    } catch (e: any) {
+      toast.error('Role change failed: ' + (e?.data?.statusMessage || e?.message || ''))
+    }
+  }
+  if (next === 'admin') {
+    confirm.ask(`Promote ${u.email} to admin?`, apply, { actionLabel: 'Promote' })
+  } else {
+    apply()
   }
 }
 </script>
 
 <template>
-  <div class="stack">
-    <div>
-      <h1>Users</h1>
-      <p class="muted">Manage roles and group membership. The first registered account is the super admin.</p>
+  <div class="space-y-6">
+    <div class="space-y-1">
+      <h1 class="text-2xl font-semibold">Users</h1>
+      <p class="text-muted-foreground">Manage roles and group membership. The first registered account is the super admin.</p>
     </div>
 
-    <section class="card">
-      <table>
-        <thead>
-          <tr><th>Email</th><th>Role</th><th>Groups</th><th>Created</th><th></th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="u in users" :key="u.id">
-            <td>{{ u.email }}</td>
-            <td>
-              <select v-model="draft[u.id]!.role" :disabled="saving === u.id">
-                <option value="user">user</option>
-                <option value="admin">admin</option>
-              </select>
-              <button class="linkish" @click="toggleRole(u)">flip</button>
-            </td>
-            <td class="groups-cell">
-              <div class="group-checks">
-                <label v-for="g in groups" :key="g.id" class="group-check">
-                  <input
-                    type="checkbox"
-                    :checked="inGroup(u.id, g.id)"
-                    :disabled="saving === u.id"
-                    @change="toggleGroup(u.id, g.id)"
-                  />
-                  <span>{{ g.name }}</span>
-                </label>
-                <span v-if="!groups || !groups.length" class="muted small">No groups defined.</span>
-              </div>
-            </td>
-            <td class="muted small">{{ new Date(u.createdAt).toLocaleDateString('en-US') }}</td>
-            <td>
-              <button class="primary" :disabled="!dirty(u) || saving === u.id" @click="save(u)">
-                {{ saving === u.id ? 'Saving…' : 'Save' }}
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <p v-if="!users || !users.length" class="muted empty">No users yet.</p>
-    </section>
+    <Card>
+      <CardContent>
+        <Table v-if="users && users.length">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Email</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Groups</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead class="w-0" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="u in users" :key="u.id">
+              <TableCell class="font-medium">{{ u.email }}</TableCell>
+              <TableCell>
+                <div class="flex items-center gap-2">
+                  <Select v-model="draft[u.id]!.role" :disabled="saving === u.id">
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">user</SelectItem>
+                      <SelectItem value="admin">admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="link" class="h-auto p-0 text-xs" @click="toggleRole(u)">flip</Button>
+                </div>
+              </TableCell>
+              <TableCell>
+                <div class="flex max-w-[320px] flex-col gap-1">
+                  <label v-for="g in groups" :key="g.id" class="flex items-center gap-1.5 text-xs">
+                    <Checkbox
+                      :model-value="inGroup(u.id, g.id)"
+                      :disabled="saving === u.id"
+                      @update:model-value="toggleGroup(u.id, g.id)"
+                    />
+                    <span>{{ g.name }}</span>
+                  </label>
+                  <span v-if="!groups || !groups.length" class="text-xs text-muted-foreground">No groups defined.</span>
+                </div>
+              </TableCell>
+              <TableCell class="text-xs text-muted-foreground">{{ new Date(u.createdAt).toLocaleDateString('en-US') }}</TableCell>
+              <TableCell>
+                <Button size="sm" :disabled="!dirty(u) || saving === u.id" @click="save(u)">
+                  {{ saving === u.id ? 'Saving…' : 'Save' }}
+                </Button>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <p v-else class="p-6 text-center text-muted-foreground">No users yet.</p>
+      </CardContent>
+    </Card>
+
+    <ConfirmDialog
+      v-model:open="confirm.state.open"
+      :message="confirm.state.message"
+      :action-label="confirm.state.actionLabel"
+      :destructive="confirm.state.destructive"
+      @accept="confirm.accept"
+    />
   </div>
 </template>
-
-<style scoped>
-.groups-cell { max-width: 320px; }
-.group-checks { display: flex; flex-direction: column; gap: 0.2rem; }
-.group-check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; }
-.group-check input { width: auto; }
-.linkish { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 0.75rem; padding: 0 0.25rem; }
-.small { font-size: 0.78rem; }
-.empty { padding: 1.5rem; text-align: center; }
-</style>

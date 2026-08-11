@@ -51,75 +51,92 @@ function fmtDate(ms: number): string {
 </script>
 
 <template>
-  <div class="stack">
-    <div>
-      <h1>Recordings</h1>
-      <p class="muted">Archived recordings of compliant streams, with online playback, download, and deletion.</p>
+  <div class="space-y-6">
+    <div class="space-y-1">
+      <h1 class="text-2xl font-semibold">Recordings</h1>
+      <p class="text-muted-foreground">
+        Archived recordings of compliant streams, with online playback, download, and deletion.
+      </p>
     </div>
 
-    <section class="card filters">
-      <div class="row">
-        <label class="field">
-          <span class="field-label">Event</span>
-          <select v-model="filters.eventId">
-            <option value="">All</option>
-            <option v-for="e in events" :key="e.id" :value="String(e.id)">{{ e.name }}</option>
-          </select>
-        </label>
-        <label class="field">
-          <span class="field-label">Date</span>
-          <input type="date" v-model="filters.date" />
-        </label>
-        <label class="field grow">
-          <span class="field-label">Search (stream name / student)</span>
-          <input type="text" v-model="filters.q" placeholder="Student ID, name, or stream name…" @keyup.enter="apply" />
-        </label>
-      </div>
-      <div class="row right">
-        <button @click="resetFilters">Clear</button>
-        <button class="primary" @click="apply">Search</button>
-      </div>
-    </section>
+    <Card>
+      <CardContent class="space-y-3">
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="space-y-1.5 min-w-[160px]">
+            <Label>Event</Label>
+            <Select v-model="filters.eventId">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All</SelectItem>
+                <SelectItem v-for="e in events" :key="e.id" :value="String(e.id)">{{ e.name }}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div class="space-y-1.5 min-w-[160px]">
+            <Label>Date</Label>
+            <Input type="date" v-model="filters.date" />
+          </div>
+          <div class="space-y-1.5 min-w-[160px] flex-1">
+            <Label>Search (stream name / student)</Label>
+            <Input
+              v-model="filters.q"
+              type="text"
+              placeholder="Student ID, name, or stream name…"
+              @keyup.enter="apply"
+            />
+          </div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <Button variant="outline" @click="resetFilters">Clear</Button>
+          <Button @click="apply">Search</Button>
+        </div>
+      </CardContent>
+    </Card>
 
     <RecordingsPlayer v-if="selected" :recording="selected" @deleted="onDeleted" />
 
-    <section class="card">
-      <div class="between">
-        <h2>Total {{ data?.length ?? 0 }}</h2>
-        <button :disabled="pending" @click="refresh()">{{ pending ? 'Refreshing…' : 'Refresh' }}</button>
-      </div>
-      <div v-if="!data || data.length === 0" class="muted empty">No recordings.</div>
-      <table v-else>
-        <thead>
-          <tr>
-            <th>Stream name</th>
-            <th>Student</th>
-            <th>Size</th>
-            <th>Resolution</th>
-            <th>Start time</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="r in data" :key="r.id" :class="{ active: r.id === selectedId }">
-            <td>{{ r.streamName }}</td>
-            <td class="muted">{{ r.studentLabel ?? '—' }}</td>
-            <td>{{ fmtSize(r.sizeBytes) }}</td>
-            <td class="muted">{{ r.width && r.height ? `${r.width}×${r.height}` : '—' }}</td>
-            <td class="muted">{{ fmtDate(r.startedAt) }}</td>
-            <td><button @click="play(r)">Play</button></td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
+    <Card>
+      <CardHeader>
+        <div class="flex items-center justify-between">
+          <CardTitle>Total {{ data?.length ?? 0 }}</CardTitle>
+          <Button variant="outline" size="sm" :disabled="pending" @click="refresh()">
+            {{ pending ? 'Refreshing…' : 'Refresh' }}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Table v-if="data && data.length">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Stream name</TableHead>
+              <TableHead>Student</TableHead>
+              <TableHead>Size</TableHead>
+              <TableHead>Resolution</TableHead>
+              <TableHead>Start time</TableHead>
+              <TableHead class="w-0" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
+              v-for="r in data"
+              :key="r.id"
+              :data-state="r.id === selectedId ? 'selected' : undefined"
+            >
+              <TableCell class="font-medium">{{ r.streamName }}</TableCell>
+              <TableCell class="text-muted-foreground">{{ r.studentLabel ?? '—' }}</TableCell>
+              <TableCell>{{ fmtSize(r.sizeBytes) }}</TableCell>
+              <TableCell class="text-muted-foreground">{{ r.width && r.height ? `${r.width}×${r.height}` : '—' }}</TableCell>
+              <TableCell class="text-muted-foreground">{{ fmtDate(r.startedAt) }}</TableCell>
+              <TableCell>
+                <Button size="sm" variant="outline" @click="play(r)">Play</Button>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <p v-else class="p-6 text-center text-muted-foreground">No recordings.</p>
+      </CardContent>
+    </Card>
   </div>
 </template>
-
-<style scoped>
-.filters .field { min-width: 160px; }
-.field { display: flex; flex-direction: column; gap: 0.25rem; }
-.field-label { font-size: 0.8rem; color: var(--muted); }
-.right { justify-content: flex-end; margin-top: 0.75rem; }
-.empty { padding: 2rem; text-align: center; }
-tbody tr.active { background: var(--panel-2); }
-</style>

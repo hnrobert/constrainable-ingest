@@ -10,12 +10,12 @@ const creating = ref(false)
 const saving = ref(false)
 const form = reactive({ name: '', slug: '', description: '' })
 
-const statusClass: Record<EventStatus, string> = {
-  draft: 'muted',
-  scheduled: 'warn',
-  live: 'ok',
-  ended: 'muted',
-  archived: 'danger',
+const statusVariant: Record<EventStatus, 'secondary' | 'warning' | 'success' | 'destructive'> = {
+  draft: 'secondary',
+  scheduled: 'warning',
+  live: 'success',
+  ended: 'secondary',
+  archived: 'destructive',
 }
 const statusLabel: Record<EventStatus, string> = {
   draft: 'Draft',
@@ -51,60 +51,68 @@ async function create(): Promise<void> {
 </script>
 
 <template>
-  <div class="stack">
-    <div class="between">
-      <div>
-        <h1>Events</h1>
-        <p class="muted">Each event has its own roster, stream keys, and config overrides.</p>
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div class="space-y-1">
+        <h1 class="text-2xl font-semibold">Events</h1>
+        <p class="text-muted-foreground">Each event has its own roster, stream keys, and config overrides.</p>
       </div>
-      <button v-if="isAdmin" class="primary" @click="creating = !creating">
+      <Button v-if="isAdmin" @click="creating = !creating">
         {{ creating ? 'Cancel' : '+ New event' }}
-      </button>
+      </Button>
     </div>
 
-    <section v-if="creating" class="card">
-      <h2>New event</h2>
-      <div class="form-grid">
-        <label class="field">
-          <span class="field-label">Name *</span>
-          <input v-model="form.name" placeholder="e.g. 2026 Regional" />
-        </label>
-        <label class="field">
-          <span class="field-label">slug (auto-generated if blank)</span>
-          <input v-model="form.slug" placeholder="e.g. regional-2026" />
-        </label>
-        <label class="field full">
-          <span class="field-label">Description</span>
-          <input v-model="form.description" />
-        </label>
-      </div>
-      <div class="row right">
-        <button class="primary" :disabled="saving" @click="create">{{ saving ? 'Creating…' : 'Create' }}</button>
-      </div>
-    </section>
+    <Card v-if="creating">
+      <CardHeader><CardTitle>New event</CardTitle></CardHeader>
+      <CardContent class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="space-y-1.5">
+            <Label>Name *</Label>
+            <Input v-model="form.name" placeholder="e.g. 2026 Regional" />
+          </div>
+          <div class="space-y-1.5">
+            <Label>slug (auto-generated if blank)</Label>
+            <Input v-model="form.slug" placeholder="e.g. regional-2026" />
+          </div>
+          <div class="space-y-1.5 col-span-full">
+            <Label>Description</Label>
+            <Input v-model="form.description" />
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <Button :disabled="saving" @click="create">{{ saving ? 'Creating…' : 'Create' }}</Button>
+        </div>
+      </CardContent>
+    </Card>
 
-    <section class="card">
-      <table>
-        <thead>
-          <tr><th>Name</th><th>slug</th><th>Status</th><th></th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="e in events" :key="e.id">
-            <td>{{ e.name }}</td>
-            <td class="muted">{{ e.slug }}</td>
-            <td><span class="badge" :class="statusClass[e.status]">{{ statusLabel[e.status] }}</span></td>
-            <td><NuxtLink :to="`/dashboard/events/${e.id}`"><button>{{ isAdmin ? 'Manage' : 'View' }}</button></NuxtLink></td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
+    <Card>
+      <CardContent class="p-0">
+        <Table v-if="events && events.length">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>slug</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead class="w-0" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="e in events" :key="e.id">
+              <TableCell class="font-medium">{{ e.name }}</TableCell>
+              <TableCell class="text-muted-foreground">{{ e.slug }}</TableCell>
+              <TableCell>
+                <Badge :variant="statusVariant[e.status]">{{ statusLabel[e.status] }}</Badge>
+              </TableCell>
+              <TableCell>
+                <Button as-child size="sm">
+                  <NuxtLink :to="`/dashboard/events/${e.id}`">{{ isAdmin ? 'Manage' : 'View' }}</NuxtLink>
+                </Button>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <p v-else class="p-6 text-center text-muted-foreground">No events yet.</p>
+      </CardContent>
+    </Card>
   </div>
 </template>
-
-<style scoped>
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-.field { display: flex; flex-direction: column; gap: 0.25rem; }
-.field.full { grid-column: 1 / -1; }
-.field-label { font-size: 0.8rem; color: var(--muted); }
-.right { justify-content: flex-end; margin-top: 0.75rem; }
-</style>

@@ -129,33 +129,21 @@ watch(
 </script>
 
 <template>
-  <div class="player card">
-    <div class="bar between">
-      <span class="badge mono">{{ props.streamName }}</span>
-      <span class="badge" :class="{
-        ok: status === 'playing',
-        warn: status === 'loading',
-        danger: status === 'error',
-        muted: status === 'idle',
-      }">
-        {{ status === 'playing' ? 'Playing' : status === 'loading' ? 'Loading…' : status === 'error' ? 'Error' : 'Idle' }}
-      </span>
-      <div class="modes">
-        <button :class="{ primary: mode === 'flv' }" @click="switchMode('flv')">FLV</button>
-        <button :class="{ primary: mode === 'webrtc' }" @click="switchMode('webrtc')">WebRTC</button>
+  <Card>
+    <CardContent class="flex flex-col gap-2 p-4">
+      <div class="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary" class="font-mono text-xs">{{ props.streamName }}</Badge>
+        <Badge :variant="status === 'playing' ? 'success' : status === 'loading' ? 'warning' : status === 'error' ? 'destructive' : 'secondary'">
+          {{ status === 'playing' ? 'Playing' : status === 'loading' ? 'Loading…' : status === 'error' ? 'Error' : 'Idle' }}
+        </Badge>
+        <div class="ml-auto flex gap-1.5">
+          <Button size="sm" :variant="mode === 'flv' ? 'default' : 'outline'" @click="switchMode('flv')">FLV</Button>
+          <Button size="sm" :variant="mode === 'webrtc' ? 'default' : 'outline'" @click="switchMode('webrtc')">WebRTC</Button>
+        </div>
       </div>
-    </div>
-    <video ref="videoEl" class="video" autoplay muted playsinline controls />
-    <p v-if="errorMsg" class="badge danger">{{ errorMsg }}</p>
-    <p class="muted small">The browser connects directly to SRS for playback. If WebRTC doesn't work, use FLV.</p>
-  </div>
+      <video ref="videoEl" class="w-full aspect-video rounded-lg bg-black" autoplay muted playsinline controls />
+      <Badge v-if="errorMsg" variant="destructive">{{ errorMsg }}</Badge>
+      <p class="text-xs text-muted-foreground">The browser connects directly to SRS for playback. If WebRTC doesn't work, use FLV.</p>
+    </CardContent>
+  </Card>
 </template>
-
-<style scoped>
-.player { display: flex; flex-direction: column; gap: 0.5rem; }
-.bar { flex-wrap: wrap; gap: 0.5rem; }
-.modes { display: flex; gap: 0.4rem; margin-left: auto; }
-.video { width: 100%; background: #000; border-radius: 8px; aspect-ratio: 16 / 9; }
-.small { font-size: 0.78rem; }
-.mono { font-family: ui-monospace, monospace; font-size: 0.82rem; }
-</style>

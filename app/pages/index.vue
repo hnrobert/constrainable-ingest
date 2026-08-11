@@ -19,12 +19,12 @@ const statusLabel: Record<EventStatus, string> = {
   ended: 'Ended',
   archived: 'Archived',
 }
-const statusClass: Record<EventStatus, string> = {
-  draft: 'muted',
-  scheduled: 'warn',
-  live: 'ok',
-  ended: 'muted',
-  archived: 'danger',
+const statusVariant: Record<EventStatus, 'secondary' | 'warning' | 'success' | 'destructive'> = {
+  draft: 'secondary',
+  scheduled: 'warning',
+  live: 'success',
+  ended: 'secondary',
+  archived: 'destructive',
 }
 
 function when(e: EventView): string {
@@ -36,45 +36,47 @@ function when(e: EventView): string {
 </script>
 
 <template>
-  <section class="hero">
-    <h1>Constrainable Ingest</h1>
-    <p class="lede">
-      ICPC proctoring stream ingest and event management. Browse public events
-      below, or sign in to access your schedule and details.
-    </p>
-    <div class="cta">
-      <NuxtLink v-if="user" to="/dashboard" class="primary">Go to dashboard</NuxtLink>
-      <NuxtLink v-else to="/login" class="primary">Sign in / Register</NuxtLink>
-    </div>
-  </section>
+  <div class="space-y-6">
+    <section class="space-y-3">
+      <h1 class="text-3xl font-bold tracking-tight">Constrainable Ingest</h1>
+      <p class="max-w-2xl leading-relaxed text-muted-foreground">
+        ICPC proctoring stream ingest and event management. Browse public events
+        below, or sign in to access your schedule and details.
+      </p>
+      <div>
+        <Button as-child>
+          <NuxtLink v-if="user" to="/dashboard">Go to dashboard</NuxtLink>
+          <NuxtLink v-else to="/login">Sign in / Register</NuxtLink>
+        </Button>
+      </div>
+    </section>
 
-  <section class="card">
-    <h2>Public events</h2>
-    <p v-if="!events || !events.length" class="muted empty">No public events right now. Check back later.</p>
-    <table v-else>
-      <thead>
-        <tr><th>Event</th><th>When</th><th>Status</th></tr>
-      </thead>
-      <tbody>
-        <tr v-for="e in events" :key="e.id">
-          <td>
-            <strong>{{ e.name }}</strong>
-            <span v-if="e.description" class="muted small block">{{ e.description }}</span>
-          </td>
-          <td class="muted">{{ when(e) }}</td>
-          <td><span class="badge" :class="statusClass[e.status]">{{ statusLabel[e.status] }}</span></td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
+    <Card>
+      <CardHeader><CardTitle>Public events</CardTitle></CardHeader>
+      <CardContent>
+        <p v-if="!events || !events.length" class="p-6 text-center text-muted-foreground">
+          No public events right now. Check back later.
+        </p>
+        <Table v-else>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Event</TableHead>
+              <TableHead>When</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="e in events" :key="e.id">
+              <TableCell>
+                <div class="font-medium">{{ e.name }}</div>
+                <div v-if="e.description" class="text-xs text-muted-foreground">{{ e.description }}</div>
+              </TableCell>
+              <TableCell class="text-muted-foreground">{{ when(e) }}</TableCell>
+              <TableCell><Badge :variant="statusVariant[e.status]">{{ statusLabel[e.status] }}</Badge></TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  </div>
 </template>
-
-<style scoped>
-.hero { margin-bottom: 1.5rem; }
-.hero h1 { font-size: 1.8rem; margin: 0 0 0.5rem; }
-.lede { color: var(--muted); max-width: 42rem; margin: 0 0 1rem; line-height: 1.5; }
-.cta { display: flex; gap: 0.75rem; }
-.empty { padding: 1.5rem; text-align: center; }
-.block { display: block; }
-.small { font-size: 0.78rem; }
-</style>

@@ -1,14 +1,30 @@
 // Nuxt 4 + Bun configuration for Constrainable Ingest
 // SSR single-process app; API lives in server/, Vue UI in app/.
+import tailwindcss from '@tailwindcss/vite'
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-30',
   devtools: { enabled: true },
   ssr: true,
 
+  // Tailwind v4 (CSS-first) via the Vite plugin — NOT @nuxtjs/tailwindcss.
+  vite: {
+    plugins: [tailwindcss()],
+  },
+
+  // shadcn-vue ui/ components resolve UNPREFIXED (<Button>, <Card>, …);
+  // everything else keeps the documented dir-prefixed names
+  // (<StreamsPlayer>, <RecordingsPlayer>, <StreamsActiveTable>) — there are two
+  // Player.vue files, so a global pathPrefix:false would collide on them.
+  components: [
+    { path: '~/components/ui', pathPrefix: false, extensions: ['.vue'] },
+    { path: '~/components', pathPrefix: true, extensions: ['.vue'] },
+  ],
+
   // vue-sonner toast host: auto-registers the client-only <Toaster> component
   // (mounted once in app.vue) and injects vue-sonner/style.css. Pages fire
   // toasts via useToast() instead of a per-page element.
-  modules: ['vue-sonner/nuxt'],
+  modules: ['vue-sonner/nuxt', '@vueuse/nuxt'],
 
   // node-server preset. Socket.IO attaches to the same HTTP server via a
   // first-request lazy attach (server/middleware/00-socket.ts) — the Nitro
@@ -57,11 +73,21 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      htmlAttrs: { lang: 'zh-CN' },
+      htmlAttrs: { lang: 'en' },
       title: 'Constrainable Ingest',
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+      ],
+      // Apply the persisted theme BEFORE paint to avoid a flash of the wrong
+      // theme. useColorMode (storageKey 'ci.theme') mirrors this client-side;
+      // stored value is 'auto' | 'light' | 'dark'.
+      script: [
+        {
+          innerHTML:
+            "(function(){try{var s=localStorage.getItem('ci.theme');var m=window.matchMedia('(prefers-color-scheme: dark)').matches;var d=s==='dark'||((s==='auto'||!s)&&m);document.documentElement.classList.toggle('dark',d);}catch(e){}})();",
+          tagPosition: 'head',
+        },
       ],
     },
   },
