@@ -6,22 +6,31 @@ const toast = useToast()
 // events for the filter dropdown (full EventView type lands in Phase 7)
 const { data: events } = useFetch<{ id: number; name: string }[]>('/api/events')
 
+// "All" filter option uses a non-empty sentinel — reka-ui forbids an empty
+// SelectItem value (empty is reserved for clearing the selection). apply() maps
+// the sentinel back to '' so the API treats it as "no filter".
+const ALL = 'all'
+
 const filters = reactive<{ eventId: string; date: string; q: string }>({
-  eventId: '',
+  eventId: ALL,
   date: '',
   q: '',
 })
 // applied filters drive the query; updated on search
-const applied = ref({ ...filters })
+const applied = ref({ eventId: '', date: '', q: '' })
 const { data, refresh, pending } = useFetch<RecordingView[]>('/api/recordings', {
   query: applied,
 })
 
 function apply(): void {
-  applied.value = { ...filters }
+  applied.value = {
+    eventId: filters.eventId === ALL ? '' : filters.eventId,
+    date: filters.date,
+    q: filters.q,
+  }
 }
 function resetFilters(): void {
-  filters.eventId = ''
+  filters.eventId = ALL
   filters.date = ''
   filters.q = ''
   apply()
@@ -69,7 +78,7 @@ function fmtDate(ms: number): string {
                 <SelectValue placeholder="All" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All</SelectItem>
+                <SelectItem :value="ALL">All</SelectItem>
                 <SelectItem v-for="e in events" :key="e.id" :value="String(e.id)">{{ e.name }}</SelectItem>
               </SelectContent>
             </Select>

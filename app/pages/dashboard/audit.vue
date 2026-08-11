@@ -10,23 +10,33 @@ const eventName = computed(() => {
   return m
 })
 
+// "All" filter options use a non-empty sentinel — reka-ui forbids an empty
+// SelectItem value (empty is reserved for clearing the selection). apply() maps
+// each sentinel back to '' so the API treats it as "no filter".
+const ALL = 'all'
+
 const filters = reactive<{ level: string; category: string; eventId: string; q: string }>({
-  level: '',
-  category: '',
-  eventId: '',
+  level: ALL,
+  category: ALL,
+  eventId: ALL,
   q: '',
 })
 // applied filters drive the query; updated on search.
-const applied = ref({ ...filters })
+const applied = ref({ level: '', category: '', eventId: '', q: '' })
 const { data, refresh, pending } = useFetch<AuditView[]>('/api/audit', { query: applied })
 
 function apply(): void {
-  applied.value = { ...filters }
+  applied.value = {
+    level: filters.level === ALL ? '' : filters.level,
+    category: filters.category === ALL ? '' : filters.category,
+    eventId: filters.eventId === ALL ? '' : filters.eventId,
+    q: filters.q,
+  }
 }
 function resetFilters(): void {
-  filters.level = ''
-  filters.category = ''
-  filters.eventId = ''
+  filters.level = ALL
+  filters.category = ALL
+  filters.eventId = ALL
   filters.q = ''
   apply()
 }
@@ -60,7 +70,7 @@ function prettyDetail(d: unknown): string {
             <Select v-model="filters.level">
               <SelectTrigger class="w-full"><SelectValue placeholder="All" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All</SelectItem>
+                <SelectItem :value="ALL">All</SelectItem>
                 <SelectItem v-for="l in AUDIT_LEVELS" :key="l" :value="l">{{ l }}</SelectItem>
               </SelectContent>
             </Select>
@@ -70,7 +80,7 @@ function prettyDetail(d: unknown): string {
             <Select v-model="filters.category">
               <SelectTrigger class="w-full"><SelectValue placeholder="All" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All</SelectItem>
+                <SelectItem :value="ALL">All</SelectItem>
                 <SelectItem v-for="c in AUDIT_CATEGORIES" :key="c" :value="c">{{ c }}</SelectItem>
               </SelectContent>
             </Select>
@@ -80,7 +90,7 @@ function prettyDetail(d: unknown): string {
             <Select v-model="filters.eventId">
               <SelectTrigger class="w-full"><SelectValue placeholder="All" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All</SelectItem>
+                <SelectItem :value="ALL">All</SelectItem>
                 <SelectItem v-for="e in events" :key="e.id" :value="String(e.id)">{{ e.name }}</SelectItem>
               </SelectContent>
             </Select>
