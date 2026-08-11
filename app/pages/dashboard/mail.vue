@@ -2,55 +2,107 @@
 import type { MailConfigClient } from '#shared/mail'
 
 const toast = useToast()
-const { data, refresh } = await useFetch<MailConfigClient>('/api/mail/config')
+
+// Sync fetch (NO top-level await) so this page doesn't drag the dashboard
+// layout into an async Suspense boundary (client hydration mismatch). Nuxt
+// still awaits the registered useFetch promise during SSR and serializes the
+// result; syncFromConfig (via the watch) re-syncs the editable form when data
+// resolves.
+const { data } = useFetch<MailConfigClient>('/api/mail/config')
 
 // editable copy of the non-secret fields; secrets are entered into separate
 // boxes and only sent when non-empty (server preserves the stored value then).
 const form = reactive({
-  provider: data.value?.provider ?? 'smtp',
-  host: data.value?.host ?? '',
-  port: data.value?.port ?? 587,
-  useSsl: data.value?.useSsl ?? false,
-  useTls: data.value?.useTls ?? true,
-  usePassword: data.value?.usePassword ?? true,
-  senderEmail: data.value?.senderEmail ?? '',
-  senderDisplay: data.value?.senderDisplay ?? '',
-  senderDomain: data.value?.senderDomain ?? '',
-  postUrl: data.value?.postUrl ?? '',
-  postSchema: data.value?.postSchema ?? 'smtogo',
+  provider: 'smtp',
+  host: '',
+  port: 587,
+  useSsl: false,
+  useTls: true,
+  usePassword: true,
+  senderEmail: '',
+  senderDisplay: '',
+  senderDomain: '',
+  postUrl: '',
+  postSchema: 'smtogo',
 })
 const senderPassword = ref('')
 const postAuthToken = ref('')
-const hasPassword = ref(data.value?.hasPassword ?? false)
-const hasPostAuthToken = ref(data.value?.hasPostAuthToken ?? false)
+const hasPassword = ref(false)
+const hasPostAuthToken = ref(false)
 
 const saving = ref(false)
+const saved = ref(false)
 const testing = ref(false)
-const testTo = ref(data.value?.senderEmail ?? '')
+const testTo = ref('')
+
+// Copy the server config into the editable form + secret-presence flags.
+function syncFromConfig(c: MailConfigClient): void {
+  form.provider = c.provider ?? 'smtp'
+  form.host = c.host ?? ''
+  form.port = c.port ?? 587
+  form.useSsl = c.useSsl ?? false
+  form.useTls = c.useTls ?? true
+  form.usePassword = c.usePassword ?? true
+  form.senderEmail = c.senderEmail ?? ''
+  form.senderDisplay = c.senderDisplay ?? ''
+  form.senderDomain = c.senderDomain ?? ''
+  form.postUrl = c.postUrl ?? ''
+  form.postSchema = c.postSchema ?? 'smtogo'
+  hasPassword.value = c.hasPassword ?? false
+  hasPostAuthToken.value = c.hasPostAuthToken ?? false
+}
+
+// Re-sync whenever the server value resolves (SSR + client). testTo is seeded
+// from the sender email only on first load, so a user-entered test recipient
+// survives a save (which re-triggers this watch via data.value = updated).
+let testToInitialized = false
+// flush:'sync' so the form is populated at the moment `data` is assigned during
+// SSR, before the render pass (the default pre-flush queue doesn't drain in
+// time on the server). On the client, data hydrates from the payload
+// synchronously during setup, so this runs before first render there too.
+watch(
+  data,
+  (d) => {
+    if (!d) return
+    syncFromConfig(d)
+    if (!testToInitialized) {
+      testTo.value = d.senderEmail ?? ''
+      testToInitialized = true
+    }
+  },
+  { immediate: true, flush: 'sync' },
+)
 
 const dirty = computed(() => {
-  if (!data.value) return true
+  if (!data.value) return false
   for (const k of Object.keys(form) as (keyof typeof form)[]) {
     if ((form[k] as unknown) !== (data.value as Record<string, unknown>)[k]) return true
   }
   return senderPassword.value !== '' || postAuthToken.value !== ''
 })
 
-async function save(): Promise<void> {
+async function save(): Promise<boolean> {
   saving.value = true
+  saved.value = false
   try {
     const updated = await $fetch<MailConfigClient>('/api/mail/config', {
       method: 'PUT',
       body: { ...form, senderPassword: senderPassword.value, postAuthToken: postAuthToken.value },
     })
     data.value = updated
-    hasPassword.value = updated.hasPassword
-    hasPostAuthToken.value = updated.hasPostAuthToken
+    // the watch re-syncs form + secret-presence flags from `updated` (clearing
+    // dirty); clear the secret inputs so they don't keep flagging dirty.
     senderPassword.value = ''
     postAuthToken.value = ''
     toast.success('Mail configuration saved')
+    saved.value = true
+    setTimeout(() => {
+      saved.value = false
+    }, 2000)
+    return true
   } catch (e: any) {
     toast.error('Save failed: ' + (e?.data?.statusMessage || e?.message || 'Unknown error'))
+    return false
   } finally {
     saving.value = false
   }
@@ -71,21 +123,31 @@ async function sendTest(): Promise<void> {
     testing.value = false
   }
 }
+
+// Warn before leaving with unsaved changes; the SaveBar + dialog provide the UI.
+const { confirmLeave, proceed } = useUnsavedLeaveGuard(dirty, saving)
+function reset(): void {
+  if (data.value) syncFromConfig(data.value)
+  senderPassword.value = ''
+  postAuthToken.value = ''
+}
+async function saveAndLeave(): Promise<void> {
+  if (await save()) proceed()
+}
+function discardAndLeave(): void {
+  reset()
+  proceed()
+}
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 pb-24">
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div class="space-y-1">
         <h1 class="text-2xl font-semibold">Mail Configuration</h1>
         <p class="text-muted-foreground">Used to send registration verification codes and system notifications. Configuration is stored in the database (not environment variables).</p>
       </div>
-      <div class="flex flex-wrap items-center gap-3">
-        <Badge v-if="dirty" variant="warning">Unsaved changes</Badge>
-        <Button :disabled="!dirty || saving" @click="save">
-          {{ saving ? 'Saving…' : 'Save' }}
-        </Button>
-      </div>
+      <Badge v-if="dirty" variant="warning">Unsaved changes</Badge>
     </div>
 
     <div class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] items-start gap-4">
@@ -191,5 +253,14 @@ async function sendTest(): Promise<void> {
         </CardContent>
       </Card>
     </div>
+
+    <SaveBar :dirty="dirty" :saving="saving" :saved="saved" @save="save" @discard="reset" />
+    <UnsavedLeaveDialog
+      :open="confirmLeave"
+      :saving="saving"
+      @stay="confirmLeave = false"
+      @discard="discardAndLeave"
+      @save="saveAndLeave"
+    />
   </div>
 </template>

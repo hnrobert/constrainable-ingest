@@ -4,7 +4,7 @@ import type { RecordingView } from '#shared/recordings'
 const toast = useToast()
 
 // events for the filter dropdown (full EventView type lands in Phase 7)
-const { data: events } = await useFetch<{ id: number; name: string }[]>('/api/events')
+const { data: events } = useFetch<{ id: number; name: string }[]>('/api/events')
 
 const filters = reactive<{ eventId: string; date: string; q: string }>({
   eventId: '',
@@ -13,7 +13,7 @@ const filters = reactive<{ eventId: string; date: string; q: string }>({
 })
 // applied filters drive the query; updated on search
 const applied = ref({ ...filters })
-const { data, refresh, pending } = await useFetch<RecordingView[]>('/api/recordings', {
+const { data, refresh, pending } = useFetch<RecordingView[]>('/api/recordings', {
   query: applied,
 })
 
@@ -62,7 +62,7 @@ function fmtDate(ms: number): string {
     <Card>
       <CardContent class="space-y-3">
         <div class="flex flex-wrap items-end gap-3">
-          <div class="space-y-1.5 min-w-[160px]">
+          <div class="space-y-1.5 min-w-40">
             <Label>Event</Label>
             <Select v-model="filters.eventId">
               <SelectTrigger class="w-full">
@@ -74,11 +74,11 @@ function fmtDate(ms: number): string {
               </SelectContent>
             </Select>
           </div>
-          <div class="space-y-1.5 min-w-[160px]">
+          <div class="space-y-1.5 min-w-40">
             <Label>Date</Label>
             <Input type="date" v-model="filters.date" />
           </div>
-          <div class="space-y-1.5 min-w-[160px] flex-1">
+          <div class="space-y-1.5 min-w-40 flex-1">
             <Label>Search (stream name / student)</Label>
             <Input
               v-model="filters.q"

@@ -5,26 +5,34 @@ definePageMeta({ layout: 'default' })
 
 const toast = useToast()
 const confirm = useConfirm()
-const { data: users, refresh } = await useFetch<UserWithGroupsView[]>('/api/users')
-const { data: groups } = await useFetch<GroupView[]>('/api/groups')
+const { data: users, refresh } = useFetch<UserWithGroupsView[]>('/api/users')
+const { data: groups } = useFetch<GroupView[]>('/api/groups')
 
-// Editable per-user working copies (role + selected group ids).
+// Editable per-user working copies (role + selected group ids), populated
+// lazily on first edit. The template reads the live user values as a fallback
+// when no draft exists yet (roleOf/inGroup), so rendering never depends on a
+// watcher having run first — SSR-safe even though the users list resolves
+// asynchronously after setup.
 const draft = ref<Record<number, { role: 'admin' | 'user'; groupIds: number[] }>>({})
 function ensureDraft(u: UserWithGroupsView): void {
   if (!draft.value[u.id]) {
     draft.value[u.id] = { role: u.role, groupIds: u.groups.map((g) => g.id) }
   }
 }
-watchEffect(() => {
-  for (const u of users.value ?? []) ensureDraft(u)
-})
-
-function inGroup(userId: number, groupId: number): boolean {
-  return draft.value[userId]?.groupIds.includes(groupId) ?? false
+function roleOf(u: UserWithGroupsView): 'admin' | 'user' {
+  return draft.value[u.id]?.role ?? u.role
 }
-function toggleGroup(userId: number, groupId: number): void {
-  const d = draft.value[userId]
-  if (!d) return
+function inGroup(u: UserWithGroupsView, groupId: number): boolean {
+  const d = draft.value[u.id]
+  return d ? d.groupIds.includes(groupId) : u.groups.some((g) => g.id === groupId)
+}
+function setRole(u: UserWithGroupsView, role: unknown): void {
+  ensureDraft(u)
+  if (role === 'admin' || role === 'user') draft.value[u.id]!.role = role
+}
+function toggleGroup(u: UserWithGroupsView, groupId: number): void {
+  ensureDraft(u)
+  const d = draft.value[u.id]!
   const i = d.groupIds.indexOf(groupId)
   if (i >= 0) d.groupIds.splice(i, 1)
   else d.groupIds.push(groupId)
@@ -96,7 +104,11 @@ function toggleRole(u: UserWithGroupsView): void {
               <TableCell class="font-medium">{{ u.email }}</TableCell>
               <TableCell>
                 <div class="flex items-center gap-2">
-                  <Select v-model="draft[u.id]!.role" :disabled="saving === u.id">
+                  <Select
+                    :model-value="roleOf(u)"
+                    :disabled="saving === u.id"
+                    @update:model-value="setRole(u, $event)"
+                  >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="user">user</SelectItem>
@@ -110,9 +122,9 @@ function toggleRole(u: UserWithGroupsView): void {
                 <div class="flex max-w-[320px] flex-col gap-1">
                   <label v-for="g in groups" :key="g.id" class="flex items-center gap-1.5 text-xs">
                     <Checkbox
-                      :model-value="inGroup(u.id, g.id)"
+                      :model-value="inGroup(u, g.id)"
                       :disabled="saving === u.id"
-                      @update:model-value="toggleGroup(u.id, g.id)"
+                      @update:model-value="toggleGroup(u, g.id)"
                     />
                     <span>{{ g.name }}</span>
                   </label>

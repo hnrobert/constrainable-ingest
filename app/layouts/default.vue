@@ -35,22 +35,27 @@ interface NavItem {
   label: string
   to: string
   icon: Component
-  admin?: boolean
 }
 
-const navItems: NavItem[] = [
+// The nav is split into two groups so the sidebar visually distinguishes what
+// every user can reach (Dashboard, Events) from admin-only management pages —
+// the admin group is shown under an "Administration" heading only for admins
+// (mirrors verifier-gateway's section pattern). The server middleware +
+// requireAdmin are the real gates; this only hides unreachable routes.
+const generalNav: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
   { label: 'Events', to: '/dashboard/events', icon: CalendarDays },
-  { label: 'Live', to: '/dashboard/streams', icon: Radio, admin: true },
-  { label: 'Recordings', to: '/dashboard/recordings', icon: Film, admin: true },
-  { label: 'Users', to: '/dashboard/users', icon: Users, admin: true },
-  { label: 'Groups', to: '/dashboard/groups', icon: UsersRound, admin: true },
-  { label: 'Config', to: '/dashboard/config', icon: Settings, admin: true },
-  { label: 'Mail', to: '/dashboard/mail', icon: Mail, admin: true },
-  { label: 'Audit', to: '/dashboard/audit', icon: ScrollText, admin: true },
 ]
 
-const visibleNav = computed(() => navItems.filter((n) => !n.admin || isAdmin.value))
+const adminNav: NavItem[] = [
+  { label: 'Live', to: '/dashboard/streams', icon: Radio },
+  { label: 'Recordings', to: '/dashboard/recordings', icon: Film },
+  { label: 'Users', to: '/dashboard/users', icon: Users },
+  { label: 'Groups', to: '/dashboard/groups', icon: UsersRound },
+  { label: 'Config', to: '/dashboard/config', icon: Settings },
+  { label: 'Mail', to: '/dashboard/mail', icon: Mail },
+  { label: 'Audit', to: '/dashboard/audit', icon: ScrollText },
+]
 
 // '/dashboard' is a prefix of every dashboard route, so only highlight it on an
 // exact match; every other item matches itself + its sub-paths.
@@ -111,7 +116,7 @@ watch(
 
       <nav class="flex-1 space-y-1 overflow-y-auto p-3">
         <NuxtLink
-          v-for="item in visibleNav"
+          v-for="item in generalNav"
           :key="item.to"
           :to="item.to"
           class="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors"
@@ -124,6 +129,28 @@ watch(
           <component :is="item.icon" :size="16" />
           {{ item.label }}
         </NuxtLink>
+
+        <template v-if="isAdmin">
+          <div
+            class="px-3 pb-1 pt-4 text-xs font-medium uppercase tracking-wider text-muted-foreground/60"
+          >
+            Administration
+          </div>
+          <NuxtLink
+            v-for="item in adminNav"
+            :key="item.to"
+            :to="item.to"
+            class="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors"
+            :class="
+              isActive(item.to)
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+            "
+          >
+            <component :is="item.icon" :size="16" />
+            {{ item.label }}
+          </NuxtLink>
+        </template>
       </nav>
 
       <div class="space-y-2 border-t p-3">

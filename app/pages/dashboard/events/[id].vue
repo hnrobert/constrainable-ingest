@@ -36,20 +36,35 @@ const obs = useObsConfig()
 const { user } = useAuth()
 const isAdmin = computed(() => user.value?.role === 'admin')
 
-const { data: event, refresh: refreshEvent } = await useFetch<EventView>(`/api/events/${id}`)
-const { data: roster, refresh: refreshRoster } = await useFetch<RosterEntry[]>(`/api/events/${id}/roster`)
-const { data: keys, refresh: refreshKeys } = await useFetch<KeyView[]>(`/api/events/${id}/keys`)
+// Sync fetch (NO top-level await) so this page doesn't drag the dashboard
+// layout into an async Suspense boundary (client hydration mismatch). Nuxt
+// still awaits the registered useFetch promises during SSR and serializes the
+// results; the template reads event/roster/keys directly (populated on SSR for
+// direct reads), and the watchEffect below (flush:'sync') populates the editable
+// `settings` copy at the instant `event` is assigned, before the render pass.
+const { data: event, refresh: refreshEvent } = useFetch<EventView>(`/api/events/${id}`)
+const { data: roster, refresh: refreshRoster } = useFetch<RosterEntry[]>(`/api/events/${id}/roster`)
+const { data: keys, refresh: refreshKeys } = useFetch<KeyView[]>(`/api/events/${id}/keys`)
 
 // ---- settings (admin-only) ----
 const settings = ref<EventView | null>(null)
 const selectedGroupIds = ref<number[]>([])
 const allGroups = ref<GroupView[]>([])
-watchEffect(() => {
-  if (event.value && !settings.value) {
-    settings.value = structuredClone(toRaw(event.value))
-    selectedGroupIds.value = event.value.groups.map((g) => g.id)
-  }
-})
+// flush:'sync' (with watch, not watchEffect) so settings/selectedGroupIds
+// populate at the moment `event` is assigned during SSR, before the render pass.
+// watchEffect's flush:'sync' does NOT re-fire on the SSR assignment the way
+// watch's does, so the editable copy stayed null server-side (card content
+// absent → hydration mismatch). The !settings guard makes this one-shot init.
+watch(
+  event,
+  (e) => {
+    if (e && !settings.value) {
+      settings.value = structuredClone(toRaw(e))
+      selectedGroupIds.value = e.groups.map((g) => g.id)
+    }
+  },
+  { immediate: true, flush: 'sync' },
+)
 // Groups catalog is admin-only; fetch lazily on the client for admins only.
 onMounted(async () => {
   if (!isAdmin.value) return
@@ -326,12 +341,12 @@ const statusOptions: { value: EventStatus; label: string }[] = [
         <div v-for="k in freshKeys" :key="k.id" class="space-y-1 border-t pt-3 first:border-t-0 first:pt-0">
           <div class="font-medium">{{ k.studentLabel }} ({{ k.studentNumber }})</div>
           <div class="flex flex-wrap items-center gap-2 text-sm">
-            <span class="min-w-[5rem] text-xs text-muted-foreground">OBS server</span>
+            <span class="min-w-20 text-xs text-muted-foreground">OBS server</span>
             <code class="font-mono text-xs">{{ obs.server.value }}</code>
             <Button variant="link" class="h-auto p-0 text-xs" @click="copy(obs.server.value, 'Copied server address')">Copy</Button>
           </div>
           <div class="flex flex-wrap items-center gap-2 text-sm">
-            <span class="min-w-[5rem] text-xs text-muted-foreground">Stream key</span>
+            <span class="min-w-20 text-xs text-muted-foreground">Stream key</span>
             <code class="font-mono text-xs">{{ obs.streamKey(k.streamName, k.token) }}</code>
             <Button variant="link" class="h-auto p-0 text-xs" @click="copy(obs.streamKey(k.streamName, k.token), 'Copied stream key')">Copy</Button>
           </div>
@@ -425,17 +440,17 @@ const statusOptions: { value: EventStatus; label: string }[] = [
         <div v-if="freshPublishToken" class="space-y-1 rounded-md border border-ok/50 p-3 text-sm">
           <strong>{{ freshPublishToken.isCustom ? 'Token applied' : 'New token (shown only once, copy it now)' }}</strong>
           <div class="flex flex-wrap items-center gap-2">
-            <span class="min-w-[5rem] text-xs text-muted-foreground">Token</span>
+            <span class="min-w-20 text-xs text-muted-foreground">Token</span>
             <code class="font-mono text-xs">{{ freshPublishToken.token }}</code>
             <Button variant="link" class="h-auto p-0 text-xs" @click="copy(freshPublishToken.token, 'Copied token')">Copy</Button>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <span class="min-w-[5rem] text-xs text-muted-foreground">OBS server</span>
+            <span class="min-w-20 text-xs text-muted-foreground">OBS server</span>
             <code class="font-mono text-xs">{{ obs.server.value }}</code>
             <Button variant="link" class="h-auto p-0 text-xs" @click="copy(obs.server.value, 'Copied server address')">Copy</Button>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <span class="min-w-[5rem] text-xs text-muted-foreground">Stream key example</span>
+            <span class="min-w-20 text-xs text-muted-foreground">Stream key example</span>
             <code class="font-mono text-xs">{{ obs.streamKey('stream-name', freshPublishToken.token) }}</code>
           </div>
         </div>
@@ -451,7 +466,7 @@ const statusOptions: { value: EventStatus; label: string }[] = [
           <Input
             v-model="customToken"
             placeholder="Or custom token (8–128 chars, alphanumeric and . _ - ~)"
-            class="min-w-[200px] flex-1"
+            class="min-w-50 flex-1"
             @keyup.enter="setCustomPublishToken"
           />
           <Button :disabled="rotatingToken || !customTokenValid" @click="setCustomPublishToken">Apply custom</Button>

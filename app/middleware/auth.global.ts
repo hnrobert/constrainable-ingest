@@ -1,7 +1,14 @@
 /**
- * Client UX gate + SSR session hydration. The server middleware is the real
- * boundary; this mirrors it for SPA navigations so an expired session redirects
- * to /login instead of surfacing 401s.
+ * Client UX gate. The server middleware (server/middleware/01-auth.ts) is the
+ * real boundary; this mirrors it for SPA navigations so an expired session
+ * redirects to /login instead of surfacing 401s.
+ *
+ * The session itself is fetched once by the SSR plugin
+ * (app/plugins/auth.server.ts) and hydrated from the payload on the client, so
+ * `user` is already populated by the time this runs — NO await here. (A previous
+ * version did `await fetchSession()` in this global middleware; that awaited
+ * middleware wrapped the whole route — layout included — in a Suspense boundary
+ * and caused a dev-only client hydration mismatch on the <Default> layout.)
  *
  *   - `/`, `/login`, `/invite` are public (outsiders reach the landing page and
  *     the invite-join flow).
@@ -21,9 +28,8 @@ const ADMIN_ONLY = [
   '/dashboard/groups',
 ]
 
-export default defineNuxtRouteMiddleware(async (to) => {
-  const { user, probed, fetchSession } = useAuth()
-  if (!probed.value) await fetchSession()
+export default defineNuxtRouteMiddleware((to) => {
+  const { user } = useAuth()
 
   // Logged-in user on the login page → go to the dashboard (both roles land there).
   if (to.path === '/login' && user.value) {

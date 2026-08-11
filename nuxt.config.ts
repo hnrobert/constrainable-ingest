@@ -40,10 +40,24 @@ export default defineNuxtConfig({
     rollupConfig: {
       onwarn(warning, warn) {
         const code = warning.code || ''
-        if (code === 'UNRESOLVED_IMPORT' && warning.message?.includes('bun:sqlite')) return
+        const msg = warning.message || ''
+        // `bun:sqlite` is a Bun-only built-in (not an npm pkg, not a node:
+        // builtin), so Rollup can't resolve it statically and warns "could not
+        // be resolved – treating it as an external dependency". Correct: it's
+        // resolved at runtime by `bun`. Silence just that warning.
+        if (code === 'UNRESOLVED_IMPORT' && msg.includes('bun:sqlite')) return
+        // reka-ui ships JSDoc comment annotations (e.g. injectLocal) that
+        // Rollup flags as INVALID_ANNOTATION and strips — harmless but noisy.
+        if (
+          code === 'INVALID_ANNOTATION' ||
+          msg.includes('annotation that Rollup cannot interpret')
+        ) {
+          return
+        }
+        // Keep Nitro's default suppressions otherwise.
         if (
           !['CIRCULAR_DEPENDENCY', 'EVAL'].includes(code) &&
-          !warning.message.includes('Unsupported source map comment')
+          !msg.includes('Unsupported source map comment')
         ) {
           warn(warning)
         }

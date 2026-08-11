@@ -3,7 +3,7 @@ import type { AuditView } from '#shared/audit'
 import { AUDIT_CATEGORIES, AUDIT_LEVELS } from '#shared/audit'
 
 // Events feed the filter dropdown and resolve eventId → name in the table.
-const { data: events } = await useFetch<{ id: number; name: string }[]>('/api/events')
+const { data: events } = useFetch<{ id: number; name: string }[]>('/api/events')
 const eventName = computed(() => {
   const m = new Map<number, string>()
   for (const e of events.value ?? []) m.set(e.id, e.name)
@@ -18,7 +18,7 @@ const filters = reactive<{ level: string; category: string; eventId: string; q: 
 })
 // applied filters drive the query; updated on search.
 const applied = ref({ ...filters })
-const { data, refresh, pending } = await useFetch<AuditView[]>('/api/audit', { query: applied })
+const { data, refresh, pending } = useFetch<AuditView[]>('/api/audit', { query: applied })
 
 function apply(): void {
   applied.value = { ...filters }
@@ -55,7 +55,7 @@ function prettyDetail(d: unknown): string {
     <Card>
       <CardContent class="space-y-4 pt-6">
         <div class="flex flex-wrap items-end gap-3">
-          <div class="min-w-[140px] space-y-1.5">
+          <div class="min-w-35 space-y-1.5">
             <Label>Level</Label>
             <Select v-model="filters.level">
               <SelectTrigger class="w-full"><SelectValue placeholder="All" /></SelectTrigger>
@@ -65,7 +65,7 @@ function prettyDetail(d: unknown): string {
               </SelectContent>
             </Select>
           </div>
-          <div class="min-w-[140px] space-y-1.5">
+          <div class="min-w-35 space-y-1.5">
             <Label>Category</Label>
             <Select v-model="filters.category">
               <SelectTrigger class="w-full"><SelectValue placeholder="All" /></SelectTrigger>
@@ -75,7 +75,7 @@ function prettyDetail(d: unknown): string {
               </SelectContent>
             </Select>
           </div>
-          <div class="min-w-[140px] space-y-1.5">
+          <div class="min-w-35 space-y-1.5">
             <Label>Event</Label>
             <Select v-model="filters.eventId">
               <SelectTrigger class="w-full"><SelectValue placeholder="All" /></SelectTrigger>
@@ -85,7 +85,7 @@ function prettyDetail(d: unknown): string {
               </SelectContent>
             </Select>
           </div>
-          <div class="min-w-[180px] flex-1 space-y-1.5">
+          <div class="min-w-45 flex-1 space-y-1.5">
             <Label>Search (message / stream)</Label>
             <Input type="text" v-model="filters.q" placeholder="Message or stream name…" @keyup.enter="apply" />
           </div>
@@ -131,7 +131,7 @@ function prettyDetail(d: unknown): string {
               </TableRow>
               <TableRow v-if="row.detail != null">
                 <TableCell colspan="6" class="p-0">
-                  <pre class="m-0 max-h-48 overflow-auto whitespace-pre-wrap break-words border-t border-dashed bg-muted/40 px-3 py-2 text-xs">{{ prettyDetail(row.detail) }}</pre>
+                  <pre class="m-0 max-h-48 overflow-auto whitespace-pre-wrap wrap-break-word border-t border-dashed bg-muted/40 px-3 py-2 text-xs">{{ prettyDetail(row.detail) }}</pre>
                 </TableCell>
               </TableRow>
             </template>

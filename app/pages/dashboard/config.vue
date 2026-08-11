@@ -2,11 +2,32 @@
 import type { AppConfig } from '#shared/config'
 
 const toast = useToast()
-const { data, refresh } = await useFetch<AppConfig>('/api/config')
 
-// editable copy; reset re-syncs from the server value
-const form = ref<AppConfig>(structuredClone(toRaw(data.value!)))
+// Sync fetch (NO top-level await) so this page doesn't drag the dashboard
+// layout into an async Suspense boundary — that caused a client hydration
+// mismatch (server rendered the full layout, client rendered a comment
+// placeholder). Nuxt still awaits the registered useFetch promise during SSR
+// and serializes the result into the payload; the watch below populates the
+// editable form on both server and client once data resolves.
+const { data } = useFetch<AppConfig>('/api/config')
+
+// editable copy; re-synced from the server value whenever data resolves.
+const form = ref<AppConfig | null>(null)
+// flush:'sync' is essential: the watcher must populate `form` at the instant
+// `data` is assigned during SSR, before the render pass — the default pre-flush
+// queue doesn't drain in time, so the form cards would be absent from server
+// HTML (hydration mismatch). On the client, data hydrates from the payload
+// synchronously during setup, so this runs before first render there too.
+watch(
+  data,
+  (d) => {
+    if (d) form.value = structuredClone(toRaw(d))
+  },
+  { immediate: true, flush: 'sync' },
+)
+
 const saving = ref(false)
+const saved = ref(false)
 
 type Kind = 'number' | 'text' | 'select' | 'bool'
 interface Field {
@@ -103,8 +124,9 @@ function onInput(path: string, kind: Kind, raw: any): void {
 // as line-separated textareas, split/joined here. Empty whitelist + enabled is
 // treated as "allow all" server-side (can't lock the app out).
 const whitelistText = computed<string>({
-  get: () => form.value.registration.emailWhitelist.patterns.join('\n'),
+  get: () => form.value?.registration.emailWhitelist.patterns.join('\n') ?? '',
   set: (v) => {
+    if (!form.value) return
     form.value.registration.emailWhitelist.patterns = v
       .split('\n')
       .map((p) => p.trim())
@@ -112,8 +134,9 @@ const whitelistText = computed<string>({
   },
 })
 const disallowedText = computed<string>({
-  get: () => form.value.registration.disallowedPatterns.join('\n'),
+  get: () => form.value?.registration.disallowedPatterns.join('\n') ?? '',
   set: (v) => {
+    if (!form.value) return
     form.value.registration.disallowedPatterns = v
       .split('\n')
       .map((p) => p.trim())
@@ -121,44 +144,60 @@ const disallowedText = computed<string>({
   },
 })
 
-const dirty = computed(() => JSON.stringify(form.value) !== JSON.stringify(data.value))
+const dirty = computed(
+  () =>
+    form.value != null &&
+    data.value != null &&
+    JSON.stringify(form.value) !== JSON.stringify(data.value),
+)
 
-async function save(): Promise<void> {
+async function save(): Promise<boolean> {
+  if (!form.value) return false
   saving.value = true
+  saved.value = false
   try {
     const updated = await $fetch<AppConfig>('/api/config', { method: 'PATCH', body: form.value })
     data.value = updated
     form.value = structuredClone(updated)
     toast.success('Configuration saved and hot-reloaded')
+    saved.value = true
+    setTimeout(() => {
+      saved.value = false
+    }, 2000)
+    return true
   } catch (e: any) {
     toast.error('Save failed: ' + (e?.data?.statusMessage || e?.message || 'Unknown error'))
+    return false
   } finally {
     saving.value = false
   }
 }
 function reset(): void {
-  if (data.value) form.value = structuredClone(data.value)
-  toast.info('Reverted to server configuration')
+  if (data.value) form.value = structuredClone(toRaw(data.value))
+}
+
+// Warn before leaving with unsaved changes; the SaveBar + dialog provide the UI.
+const { confirmLeave, proceed } = useUnsavedLeaveGuard(dirty, saving)
+async function saveAndLeave(): Promise<void> {
+  if (await save()) proceed()
+}
+function discardAndLeave(): void {
+  reset()
+  proceed()
 }
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 pb-24">
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div class="space-y-1">
         <h1 class="text-2xl font-semibold">Runtime Configuration</h1>
         <p class="text-muted-foreground">Hot-reloads on save: new sessions use the new values immediately; active sessions pick them up on the next probe.</p>
       </div>
-      <div class="flex flex-wrap items-center gap-3">
-        <Badge v-if="dirty" variant="warning">Unsaved changes</Badge>
-        <Button variant="outline" :disabled="!dirty || saving" @click="reset">Revert</Button>
-        <Button :disabled="!dirty || saving" @click="save">
-          {{ saving ? 'Saving…' : 'Save & hot-reload' }}
-        </Button>
-      </div>
+      <Badge v-if="dirty" variant="warning">Unsaved changes</Badge>
     </div>
 
-    <div class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] items-start gap-4">
+    <div v-if="form" class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] items-start gap-4">
       <Card v-for="s in sections" :key="s.title">
         <CardHeader><CardTitle>{{ s.title }}</CardTitle></CardHeader>
         <CardContent class="space-y-3">
@@ -221,5 +260,14 @@ function reset(): void {
         </CardContent>
       </Card>
     </div>
+
+    <SaveBar :dirty="dirty" :saving="saving" :saved="saved" @save="save" @discard="reset" />
+    <UnsavedLeaveDialog
+      :open="confirmLeave"
+      :saving="saving"
+      @stay="confirmLeave = false"
+      @discard="discardAndLeave"
+      @save="saveAndLeave"
+    />
   </div>
 </template>

@@ -8,7 +8,7 @@ const isAdmin = computed(() => user.value?.role === 'admin')
 
 // /api/events is authorization-filtered server-side: admins see all, regular
 // users see only the events they may view.
-const { data: events } = await useFetch<EventView[]>('/api/events')
+const { data: events } = useFetch<EventView[]>('/api/events')
 
 const statusLabel: Record<EventStatus, string> = {
   draft: 'Draft',

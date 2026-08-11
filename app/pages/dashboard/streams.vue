@@ -4,7 +4,7 @@ import type { SessionSnapshot, ViolationSnapshot, RecordingSnapshot } from '#sha
 const toast = useToast()
 
 // seed from the API (SSR), then live-update over the socket
-const { data } = await useFetch<SessionSnapshot[]>('/api/streams')
+const { data } = useFetch<SessionSnapshot[]>('/api/streams')
 
 const sessions = ref<Map<number, SessionSnapshot>>(new Map())
 const connected = ref(false)

@@ -5,8 +5,8 @@ definePageMeta({ layout: 'default' })
 
 const toast = useToast()
 const confirm = useConfirm()
-const { data: groups, refresh: refreshGroups } = await useFetch<GroupView[]>('/api/groups')
-const { data: invites, refresh: refreshInvites } = await useFetch<InviteLinkView[]>('/api/invite-links')
+const { data: groups, refresh: refreshGroups } = useFetch<GroupView[]>('/api/groups')
+const { data: invites, refresh: refreshInvites } = useFetch<InviteLinkView[]>('/api/invite-links')
 
 async function reloadAll(): Promise<void> {
   await Promise.all([refreshGroups(), refreshInvites()])
@@ -229,8 +229,8 @@ function isExpired(ms: number | null): boolean {
         <p v-else class="p-6 text-center text-muted-foreground">No groups yet.</p>
 
         <div class="flex flex-wrap items-center gap-2">
-          <Input v-model="newGroupName" placeholder="New group name" class="min-w-[180px] flex-1" @keyup.enter="createGroup" />
-          <Input v-model="newGroupDesc" placeholder="Description (optional)" class="min-w-[180px] flex-1" />
+          <Input v-model="newGroupName" placeholder="New group name" class="min-w-45 flex-1" @keyup.enter="createGroup" />
+          <Input v-model="newGroupDesc" placeholder="Description (optional)" class="min-w-45 flex-1" />
           <Button :disabled="creatingGroup" @click="createGroup">
             {{ creatingGroup ? 'Adding…' : 'Add group' }}
           </Button>

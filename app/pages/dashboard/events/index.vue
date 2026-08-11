@@ -2,7 +2,7 @@
 import type { EventView, EventStatus } from '#shared/event-view'
 
 const toast = useToast()
-const { data: events, refresh } = await useFetch<EventView[]>('/api/events')
+const { data: events, refresh } = useFetch<EventView[]>('/api/events')
 const { user } = useAuth()
 const isAdmin = computed(() => user.value?.role === 'admin')
 
