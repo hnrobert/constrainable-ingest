@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { EventView, EventStatus } from '#shared/event-view'
+import type { DataTableColumn } from '~/components/DataTable.vue'
 
 const toast = useToast()
 const { data: events, refresh } = useFetch<EventView[]>('/api/events')
@@ -24,6 +25,13 @@ const statusLabel: Record<EventStatus, string> = {
   ended: 'Ended',
   archived: 'Archived',
 }
+
+const columns: DataTableColumn[] = [
+  { key: 'name', header: 'Name', class: 'font-medium' },
+  { key: 'slug', header: 'slug', class: 'text-muted-foreground' },
+  { key: 'status', header: 'Status' },
+  { key: 'actions', header: '', headClass: 'w-0' },
+]
 
 async function create(): Promise<void> {
   if (!form.name.trim()) {
@@ -86,32 +94,22 @@ async function create(): Promise<void> {
     </Card>
 
     <Card>
-      <CardContent class="p-0">
-        <Table v-if="events && events.length">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>slug</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead class="w-0" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="e in events" :key="e.id">
-              <TableCell class="font-medium">{{ e.name }}</TableCell>
-              <TableCell class="text-muted-foreground">{{ e.slug }}</TableCell>
-              <TableCell>
-                <Badge :variant="statusVariant[e.status]">{{ statusLabel[e.status] }}</Badge>
-              </TableCell>
-              <TableCell>
-                <Button as-child size="sm">
-                  <NuxtLink :to="`/dashboard/events/${e.id}`">{{ isAdmin ? 'Manage' : 'View' }}</NuxtLink>
-                </Button>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-        <p v-else class="p-6 text-center text-muted-foreground">No events yet.</p>
+      <CardContent>
+        <DataTable
+          :columns="columns"
+          :rows="events ?? []"
+          :row-key="(e: EventView) => e.id"
+          empty="No events yet."
+        >
+          <template #cell-status="{ row }">
+            <Badge :variant="statusVariant[row.status]">{{ statusLabel[row.status] }}</Badge>
+          </template>
+          <template #cell-actions="{ row }">
+            <Button as-child size="sm">
+              <NuxtLink :to="`/dashboard/events/${row.id}`">{{ isAdmin ? 'Manage' : 'View' }}</NuxtLink>
+            </Button>
+          </template>
+        </DataTable>
       </CardContent>
     </Card>
   </div>
