@@ -46,20 +46,49 @@ function dirty(u: UserWithGroupsView): boolean {
   return d.groupIds.slice().sort().join(',') !== u.groups.map((g) => g.id).sort().join(',')
 }
 
-const saving = ref<number | null>(null)
-async function save(u: UserWithGroupsView): Promise<void> {
-  const d = draft.value[u.id]
-  if (!d) return
-  saving.value = u.id
+const saving = ref(false)
+const saved = ref(false)
+const anyDirty = computed(() => (users.value ?? []).some((u) => dirty(u)))
+async function saveAll(): Promise<boolean> {
+  const dirtyUsers = (users.value ?? []).filter((u) => dirty(u))
+  if (!dirtyUsers.length) return false
+  saving.value = true
+  saved.value = false
   try {
-    await $fetch(`/api/users/${u.id}`, { method: 'PATCH', body: { role: d.role, groupIds: d.groupIds } })
-    toast.success(`Updated ${u.email}`)
+    await Promise.all(
+      dirtyUsers.map((u) => {
+        const d = draft.value[u.id]!
+        return $fetch(`/api/users/${u.id}`, { method: 'PATCH', body: { role: d.role, groupIds: d.groupIds } })
+      }),
+    )
+    toast.success(`Updated ${dirtyUsers.length} user${dirtyUsers.length > 1 ? 's' : ''}`)
     await refresh()
+    draft.value = {}
+    saved.value = true
+    setTimeout(() => {
+      saved.value = false
+    }, 2000)
+    return true
   } catch (e: any) {
     toast.error('Save failed: ' + (e?.data?.statusMessage || e?.message || ''))
+    await refresh() // resync drafts with server state on partial failure
+    return false
   } finally {
-    saving.value = null
+    saving.value = false
   }
+}
+function resetAll(): void {
+  draft.value = {}
+}
+
+// Warn before leaving with unsaved edits; the SaveBar + dialog provide the UI.
+const { confirmLeave, proceed } = useUnsavedLeaveGuard(anyDirty, saving)
+async function saveAndLeave(): Promise<void> {
+  if (await saveAll()) proceed()
+}
+function discardAndLeave(): void {
+  resetAll()
+  proceed()
 }
 
 function toggleRole(u: UserWithGroupsView): void {
@@ -85,12 +114,11 @@ const columns: DataTableColumn[] = [
   { key: 'role', header: 'Role' },
   { key: 'groups', header: 'Groups' },
   { key: 'createdAt', header: 'Created' },
-  { key: 'actions', header: '', headClass: 'w-0' },
 ]
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 pb-24">
     <div class="space-y-1">
       <h1 class="text-2xl font-semibold">Users</h1>
       <p class="text-muted-foreground">Manage roles and group membership. The first registered account is the super admin.</p>
@@ -108,7 +136,7 @@ const columns: DataTableColumn[] = [
             <div class="flex items-center gap-2">
               <Select
                 :model-value="roleOf(row)"
-                :disabled="saving === row.id"
+                :disabled="saving"
                 @update:model-value="setRole(row, $event)"
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -117,7 +145,7 @@ const columns: DataTableColumn[] = [
                   <SelectItem value="admin">admin</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="link" class="h-auto p-0 text-xs" @click="toggleRole(row)">flip</Button>
+              <Button variant="link" class="h-auto p-0 text-xs" :disabled="saving" @click="toggleRole(row)">flip</Button>
             </div>
           </template>
           <template #cell-groups="{ row }">
@@ -125,7 +153,7 @@ const columns: DataTableColumn[] = [
               <label v-for="g in groups" :key="g.id" class="flex items-center gap-1.5 text-xs">
                 <Checkbox
                   :model-value="inGroup(row, g.id)"
-                  :disabled="saving === row.id"
+                  :disabled="saving"
                   @update:model-value="toggleGroup(row, g.id)"
                 />
                 <span>{{ g.name }}</span>
@@ -136,14 +164,18 @@ const columns: DataTableColumn[] = [
           <template #cell-createdAt="{ row }">
             <span class="text-xs text-muted-foreground">{{ new Date(row.createdAt).toLocaleDateString('en-US') }}</span>
           </template>
-          <template #cell-actions="{ row }">
-            <Button size="sm" :disabled="!dirty(row) || saving === row.id" @click="save(row)">
-              {{ saving === row.id ? 'Saving…' : 'Save' }}
-            </Button>
-          </template>
         </DataTable>
       </CardContent>
     </Card>
+
+    <SaveBar :dirty="anyDirty" :saving="saving" :saved="saved" @save="saveAll" @discard="resetAll" />
+    <UnsavedLeaveDialog
+      :open="confirmLeave"
+      :saving="saving"
+      @stay="confirmLeave = false"
+      @discard="discardAndLeave"
+      @save="saveAndLeave"
+    />
 
     <ConfirmDialog
       v-model:open="confirm.state.open"

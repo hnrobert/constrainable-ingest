@@ -154,8 +154,7 @@ function discardAndLeave(): void {
       <Card>
         <CardHeader><CardTitle>Delivery Method</CardTitle></CardHeader>
         <CardContent>
-          <div class="space-y-1.5">
-            <Label>Provider</Label>
+          <FieldRow label="Provider">
             <Select v-model="form.provider">
               <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -163,64 +162,51 @@ function discardAndLeave(): void {
                 <SelectItem value="post">HTTP Webhook (forward to downstream automation/mail service)</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </FieldRow>
         </CardContent>
       </Card>
 
       <Card v-if="form.provider === 'smtp'">
         <CardHeader><CardTitle>SMTP</CardTitle></CardHeader>
         <CardContent class="space-y-3">
-          <div class="space-y-1.5">
-            <Label>Server (host)</Label>
+          <FieldRow label="Server (host)">
             <Input v-model="form.host" placeholder="smtp.example.com" />
-          </div>
-          <div class="space-y-1.5">
-            <Label>Port</Label>
+          </FieldRow>
+          <FieldRow label="Port">
             <Input v-model.number="form.port" type="number" />
-          </div>
-          <div class="flex items-center gap-2">
+          </FieldRow>
+          <FieldRow label="Implicit TLS (SSL)" hint="direct TLS, typically port 465">
             <Checkbox v-model="form.useSsl" />
-            <span class="text-sm">Implicit TLS (SSL) <span class="text-muted-foreground">— direct TLS, typically port 465</span></span>
-          </div>
-          <div class="flex items-center gap-2">
+          </FieldRow>
+          <FieldRow label="STARTTLS" hint="upgrade to TLS, typically port 587/25">
             <Checkbox v-model="form.useTls" />
-            <span class="text-sm">STARTTLS <span class="text-muted-foreground">— upgrade to TLS, typically port 587/25</span></span>
-          </div>
-          <div class="flex items-center gap-2">
+          </FieldRow>
+          <FieldRow label="Requires login authentication">
             <Checkbox v-model="form.usePassword" />
-            <span class="text-sm">Requires login authentication</span>
-          </div>
-          <div class="space-y-1.5">
-            <Label>Sender email (login account)</Label>
+          </FieldRow>
+          <FieldRow label="Sender email (login account)">
             <Input v-model="form.senderEmail" placeholder="noreply@example.com" />
-          </div>
-          <div class="space-y-1.5">
-            <Label>Sender display name</Label>
+          </FieldRow>
+          <FieldRow label="Sender display name">
             <Input v-model="form.senderDisplay" placeholder="Proctoring Ingest Platform" />
-          </div>
-          <div class="space-y-1.5">
-            <Label>Sender domain (Message-ID, optional)</Label>
+          </FieldRow>
+          <FieldRow label="Sender domain (Message-ID, optional)">
             <Input v-model="form.senderDomain" placeholder="example.com" />
-          </div>
-          <div class="space-y-1.5">
-            <Label>
-              SMTP password
-              <span v-if="hasPassword" class="text-muted-foreground">(set; leave blank to keep unchanged)</span>
-            </Label>
+          </FieldRow>
+          <FieldRow label="SMTP password">
             <Input v-model="senderPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep unchanged" />
-          </div>
+            <template v-if="hasPassword" #hint>(set; leave blank to keep unchanged)</template>
+          </FieldRow>
         </CardContent>
       </Card>
 
       <Card v-if="form.provider === 'post'">
         <CardHeader><CardTitle>HTTP Webhook</CardTitle></CardHeader>
         <CardContent class="space-y-3">
-          <div class="space-y-1.5">
-            <Label>Webhook URL</Label>
+          <FieldRow label="Webhook URL">
             <Input v-model="form.postUrl" placeholder="https://..." />
-          </div>
-          <div class="space-y-1.5">
-            <Label>Data format</Label>
+          </FieldRow>
+          <FieldRow label="Data format">
             <Select v-model="form.postSchema">
               <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -228,14 +214,11 @@ function discardAndLeave(): void {
                 <SelectItem value="powerautomate">Power Automate ({ email, content, subject })</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div class="space-y-1.5">
-            <Label>
-              Bearer Token (auth, optional)
-              <span v-if="hasPostAuthToken" class="text-muted-foreground">(set; leave blank to keep unchanged)</span>
-            </Label>
+          </FieldRow>
+          <FieldRow label="Bearer Token (auth, optional)">
             <Input v-model="postAuthToken" type="password" autocomplete="new-password" placeholder="Leave blank to keep unchanged" />
-          </div>
+            <template v-if="hasPostAuthToken" #hint>(set; leave blank to keep unchanged)</template>
+          </FieldRow>
         </CardContent>
       </Card>
 

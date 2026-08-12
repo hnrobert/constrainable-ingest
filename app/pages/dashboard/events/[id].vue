@@ -99,8 +99,12 @@ const visibilityLabel: Record<EventVisibility, string> = {
   groups: 'Specific groups',
 }
 
-async function saveSettings(): Promise<void> {
-  if (!settings.value) return
+const saving = ref(false)
+const saved = ref(false)
+async function saveSettings(): Promise<boolean> {
+  if (!settings.value) return false
+  saving.value = true
+  saved.value = false
   try {
     const s = settings.value
     const updated = await $fetch<EventView>(`/api/events/${id}`, {
@@ -119,9 +123,33 @@ async function saveSettings(): Promise<void> {
     settings.value = structuredClone(updated)
     selectedGroupIds.value = updated.groups.map((g) => g.id)
     toast.success('Event updated')
+    saved.value = true
+    setTimeout(() => {
+      saved.value = false
+    }, 2000)
+    return true
   } catch (e: any) {
     toast.error('Save failed: ' + (e?.data?.statusMessage || e?.message || ''))
+    return false
+  } finally {
+    saving.value = false
   }
+}
+function resetSettings(): void {
+  if (event.value) {
+    settings.value = structuredClone(toRaw(event.value))
+    selectedGroupIds.value = event.value.groups.map((g) => g.id)
+  }
+}
+
+// Warn before leaving with unsaved settings; the SaveBar + dialog provide the UI.
+const { confirmLeave, proceed } = useUnsavedLeaveGuard(settingsDirty, saving)
+async function saveAndLeave(): Promise<void> {
+  if (await saveSettings()) proceed()
+}
+function discardAndLeave(): void {
+  resetSettings()
+  proceed()
 }
 
 // ---- roster CSV import (admin) ----
@@ -333,7 +361,7 @@ const keyColumns: DataTableColumn[] = [
 </script>
 
 <template>
-  <div v-if="event" class="space-y-6">
+  <div v-if="event" class="space-y-6 pb-24">
     <div class="space-y-1">
       <NuxtLink to="/dashboard/events" class="text-sm text-muted-foreground hover:text-foreground">← Back to events</NuxtLink>
       <h1 class="text-2xl font-semibold">{{ event.name }}</h1>
@@ -431,10 +459,6 @@ const keyColumns: DataTableColumn[] = [
               <p v-if="!allGroups.length" class="text-xs text-muted-foreground">No groups exist yet — create some on the Groups page first.</p>
             </div>
           </div>
-        </div>
-        <div class="flex items-center justify-end gap-3">
-          <Badge v-if="settingsDirty" variant="warning">Unsaved changes</Badge>
-          <Button :disabled="!settingsDirty" @click="saveSettings">Save</Button>
         </div>
       </CardContent>
     </Card>
@@ -581,6 +605,15 @@ const keyColumns: DataTableColumn[] = [
         </DataTable>
       </CardContent>
     </Card>
+
+    <SaveBar :dirty="settingsDirty" :saving="saving" :saved="saved" @save="saveSettings" @discard="resetSettings" />
+    <UnsavedLeaveDialog
+      :open="confirmLeave"
+      :saving="saving"
+      @stay="confirmLeave = false"
+      @discard="discardAndLeave"
+      @save="saveAndLeave"
+    />
 
     <ConfirmDialog
       v-model:open="confirm.state.open"

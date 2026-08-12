@@ -41,28 +41,57 @@ async function createGroup(): Promise<void> {
 const editId = ref<number | null>(null)
 const editName = ref('')
 const editDesc = ref('')
+const editOrig = ref<{ name: string; description: string }>({ name: '', description: '' })
 function startEdit(g: GroupView): void {
   editId.value = g.id
   editName.value = g.name
   editDesc.value = g.description ?? ''
+  editOrig.value = { name: g.name, description: g.description ?? '' }
 }
 function cancelEdit(): void {
   editId.value = null
 }
-async function saveEdit(g: GroupView): Promise<void> {
+const editDirty = computed(
+  () => editId.value !== null && (editName.value !== editOrig.value.name || editDesc.value !== editOrig.value.description),
+)
+const saving = ref(false)
+const saved = ref(false)
+async function saveEdit(): Promise<boolean> {
+  if (editId.value === null) return false
   const name = editName.value.trim()
   if (!name) {
     toast.error('Group name is required')
-    return
+    return false
   }
+  saving.value = true
+  saved.value = false
   try {
-    await $fetch(`/api/groups/${g.id}`, { method: 'PATCH', body: { name, description: editDesc.value.trim() || null } })
+    const id = editId.value
+    await $fetch(`/api/groups/${id}`, { method: 'PATCH', body: { name, description: editDesc.value.trim() || null } })
     toast.success('Group updated')
     editId.value = null
     await reloadAll()
+    saved.value = true
+    setTimeout(() => {
+      saved.value = false
+    }, 2000)
+    return true
   } catch (e: any) {
     toast.error('Update failed: ' + (e?.data?.statusMessage || e?.message || ''))
+    return false
+  } finally {
+    saving.value = false
   }
+}
+
+// Warn before leaving with an unsaved inline edit; the SaveBar + dialog provide the UI.
+const { confirmLeave, proceed } = useUnsavedLeaveGuard(editDirty, saving)
+async function saveAndLeave(): Promise<void> {
+  if (await saveEdit()) proceed()
+}
+function discardAndLeave(): void {
+  cancelEdit()
+  proceed()
 }
 function removeGroup(g: GroupView): void {
   confirm.ask(
@@ -193,7 +222,7 @@ const inviteColumns: DataTableColumn[] = [
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 pb-24">
     <div class="space-y-1">
       <h1 class="text-2xl font-semibold">Groups &amp; invites</h1>
       <p class="text-muted-foreground">
@@ -213,11 +242,11 @@ const inviteColumns: DataTableColumn[] = [
           empty="No groups yet."
         >
           <template #cell-name="{ row }">
-            <Input v-if="editId === row.id" v-model="editName" />
+            <Input v-if="editId === row.id" v-model="editName" :disabled="saving" />
             <span v-else class="font-medium">{{ row.name }}</span>
           </template>
           <template #cell-description="{ row }">
-            <Input v-if="editId === row.id" v-model="editDesc" placeholder="optional" />
+            <Input v-if="editId === row.id" v-model="editDesc" :disabled="saving" placeholder="optional" />
             <span v-else class="text-muted-foreground">{{ row.description || '—' }}</span>
           </template>
           <template #cell-memberCount="{ row }">
@@ -227,11 +256,7 @@ const inviteColumns: DataTableColumn[] = [
             <span v-if="editId !== row.id" class="text-xs text-muted-foreground">{{ fmtDate(row.createdAt) }}</span>
           </template>
           <template #cell-actions="{ row }">
-            <div v-if="editId === row.id" class="flex justify-end gap-2">
-              <Button size="sm" @click="saveEdit(row)">Save</Button>
-              <Button size="sm" variant="outline" @click="cancelEdit">Cancel</Button>
-            </div>
-            <div v-else class="flex justify-end gap-2">
+            <div v-if="editId !== row.id" class="flex justify-end gap-2">
               <Button size="sm" variant="outline" @click="startEdit(row)">Edit</Button>
               <Button size="sm" variant="destructive" @click="removeGroup(row)">Delete</Button>
             </div>
@@ -324,6 +349,15 @@ const inviteColumns: DataTableColumn[] = [
         <p v-else class="text-xs text-muted-foreground">Create a group first before generating invite links.</p>
       </CardContent>
     </Card>
+
+    <SaveBar :dirty="editDirty" :saving="saving" :saved="saved" @save="saveEdit" @discard="cancelEdit" />
+    <UnsavedLeaveDialog
+      :open="confirmLeave"
+      :saving="saving"
+      @stay="confirmLeave = false"
+      @discard="discardAndLeave"
+      @save="saveAndLeave"
+    />
 
     <ConfirmDialog
       v-model:open="confirm.state.open"
