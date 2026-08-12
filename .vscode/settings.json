@@ -15,6 +15,7 @@
         "Rtmp",
         "smtogo",
         "STARTTLS",
-        "textareas"
+        "textareas",
+        "vueuse"
     ]
 }
