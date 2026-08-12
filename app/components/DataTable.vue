@@ -36,6 +36,13 @@ withDefaults(
     /** Stable per-row key (DB id, sessionId, …) for the v-for :key. */
     rowKey: (row: T) => string | number
     empty?: string
+    /** When provided, each row for which this returns true gets a second,
+     *  full-width "detail" row rendering the `#detail` slot — e.g. an
+     *  expandable JSON blob under an audit entry. Omit for ordinary tables. */
+    detailWhen?: (row: T) => boolean
+    /** Optional per-row class (or data-state) — e.g. return
+     *  `selected ? 'bg-muted' : undefined` to highlight the active row. */
+    rowClass?: (row: T) => HTMLAttributes["class"]
   }>(),
   { empty: "No data." },
 )
@@ -57,13 +64,20 @@ function valueAt(row: T, key: string): unknown {
     </TableHeader>
     <TableBody>
       <TableEmpty v-if="!rows.length" :colspan="columns.length">{{ empty }}</TableEmpty>
-      <TableRow v-for="(row, i) in rows" :key="rowKey(row)">
-        <TableCell v-for="col in columns" :key="col.key" :class="col.class">
-          <slot :name="`cell-${col.key}`" :row="row" :index="i">
-            {{ valueAt(row, col.key) }}
-          </slot>
-        </TableCell>
-      </TableRow>
+      <template v-for="(row, i) in rows" :key="rowKey(row)">
+        <TableRow :class="rowClass?.(row)">
+          <TableCell v-for="col in columns" :key="col.key" :class="col.class">
+            <slot :name="`cell-${col.key}`" :row="row" :index="i">
+              {{ valueAt(row, col.key) }}
+            </slot>
+          </TableCell>
+        </TableRow>
+        <TableRow v-if="detailWhen?.(row)">
+          <TableCell :colspan="columns.length" class="p-0">
+            <slot name="detail" :row="row" :index="i" />
+          </TableCell>
+        </TableRow>
+      </template>
     </TableBody>
   </Table>
 </template>

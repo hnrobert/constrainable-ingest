@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AuditView } from '#shared/audit'
+import type { DataTableColumn } from '~/components/DataTable.vue'
 import { AUDIT_CATEGORIES, AUDIT_LEVELS } from '#shared/audit'
 
 // Events feed the filter dropdown and resolve eventId → name in the table.
@@ -52,6 +53,19 @@ const levelVariant: Record<string, 'success' | 'warning' | 'destructive'> = {
 function prettyDetail(d: unknown): string {
   if (d == null) return ''
   return typeof d === 'string' ? d : JSON.stringify(d, null, 2)
+}
+
+const columns: DataTableColumn[] = [
+  { key: 'ts', header: 'Time', class: 'whitespace-nowrap text-xs text-muted-foreground' },
+  { key: 'level', header: 'Level' },
+  { key: 'category', header: 'Category', class: 'text-muted-foreground' },
+  { key: 'eventId', header: 'Event', class: 'text-muted-foreground' },
+  { key: 'streamName', header: 'Stream', class: 'text-muted-foreground' },
+  { key: 'message', header: 'Message' },
+]
+
+function hasDetail(row: AuditView): boolean {
+  return row.detail != null
 }
 </script>
 
@@ -115,38 +129,25 @@ function prettyDetail(d: unknown): string {
         </div>
       </CardHeader>
       <CardContent>
-        <p v-if="!data || data.length === 0" class="p-6 text-center text-muted-foreground">No audit entries.</p>
-        <Table v-else>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Time</TableHead>
-              <TableHead>Level</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Event</TableHead>
-              <TableHead>Stream</TableHead>
-              <TableHead>Message</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <template v-for="row in data" :key="row.id">
-              <TableRow>
-                <TableCell class="whitespace-nowrap text-xs text-muted-foreground">{{ fmtDate(row.ts) }}</TableCell>
-                <TableCell>
-                  <Badge :variant="levelVariant[row.level] ?? 'secondary'">{{ row.level }}</Badge>
-                </TableCell>
-                <TableCell class="text-muted-foreground">{{ row.category }}</TableCell>
-                <TableCell class="text-muted-foreground">{{ row.eventId ? (eventName.get(row.eventId) ?? `#${row.eventId}`) : '—' }}</TableCell>
-                <TableCell class="text-muted-foreground">{{ row.streamName ?? '—' }}</TableCell>
-                <TableCell>{{ row.message }}</TableCell>
-              </TableRow>
-              <TableRow v-if="row.detail != null">
-                <TableCell colspan="6" class="p-0">
-                  <pre class="m-0 max-h-48 overflow-auto whitespace-pre-wrap wrap-break-word border-t border-dashed bg-muted/40 px-3 py-2 text-xs">{{ prettyDetail(row.detail) }}</pre>
-                </TableCell>
-              </TableRow>
-            </template>
-          </TableBody>
-        </Table>
+        <DataTable
+          :columns="columns"
+          :rows="data ?? []"
+          :row-key="(row: AuditView) => row.id"
+          :detail-when="hasDetail"
+          empty="No audit entries."
+        >
+          <template #cell-ts="{ row }">{{ fmtDate(row.ts) }}</template>
+          <template #cell-level="{ row }">
+            <Badge :variant="levelVariant[row.level] ?? 'secondary'">{{ row.level }}</Badge>
+          </template>
+          <template #cell-eventId="{ row }">
+            {{ row.eventId ? (eventName.get(row.eventId) ?? `#${row.eventId}`) : '—' }}
+          </template>
+          <template #cell-streamName="{ row }">{{ row.streamName ?? '—' }}</template>
+          <template #detail="{ row }">
+            <pre class="m-0 max-h-48 overflow-auto whitespace-pre-wrap wrap-break-word border-t border-dashed bg-muted/40 px-3 py-2 text-xs">{{ prettyDetail(row.detail) }}</pre>
+          </template>
+        </DataTable>
       </CardContent>
     </Card>
   </div>

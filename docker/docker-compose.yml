@@ -47,7 +47,7 @@ services:
     restart: unless-stopped
 
   srs:
-    image: ossrs/srs:7
+    image: ossrs/srs:6
     container_name: ingest-srs
     entrypoint: ["/bin/sh", "/srs-entrypoint.sh"]
     environment:

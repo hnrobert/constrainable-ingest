@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { EventView, EventStatus } from '#shared/event-view'
+import type { DataTableColumn } from '~/components/DataTable.vue'
 
 definePageMeta({ layout: 'public' })
 
@@ -33,6 +34,12 @@ function when(e: EventView): string {
   if (!e.endsAt) return s
   return `${s} → ${new Date(e.endsAt).toLocaleString('en-US', { hour12: false })}`
 }
+
+const columns: DataTableColumn[] = [
+  { key: 'name', header: 'Event' },
+  { key: 'when', header: 'When' },
+  { key: 'status', header: 'Status' },
+]
 </script>
 
 <template>
@@ -54,28 +61,23 @@ function when(e: EventView): string {
     <Card>
       <CardHeader><CardTitle>Public events</CardTitle></CardHeader>
       <CardContent>
-        <p v-if="!events || !events.length" class="p-6 text-center text-muted-foreground">
-          No public events right now. Check back later.
-        </p>
-        <Table v-else>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Event</TableHead>
-              <TableHead>When</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="e in events" :key="e.id">
-              <TableCell>
-                <div class="font-medium">{{ e.name }}</div>
-                <div v-if="e.description" class="text-xs text-muted-foreground">{{ e.description }}</div>
-              </TableCell>
-              <TableCell class="text-muted-foreground">{{ when(e) }}</TableCell>
-              <TableCell><Badge :variant="statusVariant[e.status]">{{ statusLabel[e.status] }}</Badge></TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+        <DataTable
+          :columns="columns"
+          :rows="events ?? []"
+          :row-key="(e: EventView) => e.id"
+          empty="No public events right now. Check back later."
+        >
+          <template #cell-name="{ row }">
+            <div class="font-medium">{{ row.name }}</div>
+            <div v-if="row.description" class="text-xs text-muted-foreground">{{ row.description }}</div>
+          </template>
+          <template #cell-when="{ row }">
+            <span class="text-muted-foreground">{{ when(row) }}</span>
+          </template>
+          <template #cell-status="{ row }">
+            <Badge :variant="statusVariant[row.status]">{{ statusLabel[row.status] }}</Badge>
+          </template>
+        </DataTable>
       </CardContent>
     </Card>
   </div>

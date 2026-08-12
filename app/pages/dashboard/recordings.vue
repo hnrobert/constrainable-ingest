@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { RecordingView } from '#shared/recordings'
+import type { DataTableColumn } from '~/components/DataTable.vue'
 
 const toast = useToast()
 
@@ -56,6 +57,19 @@ function fmtSize(bytes: number): string {
 }
 function fmtDate(ms: number): string {
   return new Date(ms).toLocaleString('en-US', { hour12: false })
+}
+
+const columns: DataTableColumn[] = [
+  { key: 'streamName', header: 'Stream name', class: 'font-medium' },
+  { key: 'studentLabel', header: 'Student', class: 'text-muted-foreground' },
+  { key: 'sizeBytes', header: 'Size' },
+  { key: 'resolution', header: 'Resolution', class: 'text-muted-foreground' },
+  { key: 'startedAt', header: 'Start time', class: 'text-muted-foreground' },
+  { key: 'actions', header: '', headClass: 'w-0' },
+]
+
+function rowClass(r: RecordingView): string | undefined {
+  return r.id === selectedId.value ? 'bg-muted' : undefined
 }
 </script>
 
@@ -116,35 +130,29 @@ function fmtDate(ms: number): string {
         </div>
       </CardHeader>
       <CardContent>
-        <Table v-if="data && data.length">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Stream name</TableHead>
-              <TableHead>Student</TableHead>
-              <TableHead>Size</TableHead>
-              <TableHead>Resolution</TableHead>
-              <TableHead>Start time</TableHead>
-              <TableHead class="w-0" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="r in data"
-              :key="r.id"
-              :data-state="r.id === selectedId ? 'selected' : undefined"
-            >
-              <TableCell class="font-medium">{{ r.streamName }}</TableCell>
-              <TableCell class="text-muted-foreground">{{ r.studentLabel ?? '—' }}</TableCell>
-              <TableCell>{{ fmtSize(r.sizeBytes) }}</TableCell>
-              <TableCell class="text-muted-foreground">{{ r.width && r.height ? `${r.width}×${r.height}` : '—' }}</TableCell>
-              <TableCell class="text-muted-foreground">{{ fmtDate(r.startedAt) }}</TableCell>
-              <TableCell>
-                <Button size="sm" variant="outline" @click="play(r)">Play</Button>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-        <p v-else class="p-6 text-center text-muted-foreground">No recordings.</p>
+        <DataTable
+          :columns="columns"
+          :rows="data ?? []"
+          :row-key="(r: RecordingView) => r.id"
+          :row-class="rowClass"
+          empty="No recordings."
+        >
+          <template #cell-studentLabel="{ row }">
+            {{ row.studentLabel ?? '—' }}
+          </template>
+          <template #cell-sizeBytes="{ row }">
+            {{ fmtSize(row.sizeBytes) }}
+          </template>
+          <template #cell-resolution="{ row }">
+            {{ row.width && row.height ? `${row.width}×${row.height}` : '—' }}
+          </template>
+          <template #cell-startedAt="{ row }">
+            {{ fmtDate(row.startedAt) }}
+          </template>
+          <template #cell-actions="{ row }">
+            <Button size="sm" variant="outline" @click="play(row)">Play</Button>
+          </template>
+        </DataTable>
       </CardContent>
     </Card>
   </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { UserWithGroupsView, GroupView } from '#shared/groups'
+import type { DataTableColumn } from '~/components/DataTable.vue'
 
 definePageMeta({ layout: 'default' })
 
@@ -78,6 +79,14 @@ function toggleRole(u: UserWithGroupsView): void {
     apply()
   }
 }
+
+const columns: DataTableColumn[] = [
+  { key: 'email', header: 'Email', class: 'font-medium' },
+  { key: 'role', header: 'Role' },
+  { key: 'groups', header: 'Groups' },
+  { key: 'createdAt', header: 'Created' },
+  { key: 'actions', header: '', headClass: 'w-0' },
+]
 </script>
 
 <template>
@@ -89,58 +98,50 @@ function toggleRole(u: UserWithGroupsView): void {
 
     <Card>
       <CardContent>
-        <Table v-if="users && users.length">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Groups</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead class="w-0" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="u in users" :key="u.id">
-              <TableCell class="font-medium">{{ u.email }}</TableCell>
-              <TableCell>
-                <div class="flex items-center gap-2">
-                  <Select
-                    :model-value="roleOf(u)"
-                    :disabled="saving === u.id"
-                    @update:model-value="setRole(u, $event)"
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="user">user</SelectItem>
-                      <SelectItem value="admin">admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button variant="link" class="h-auto p-0 text-xs" @click="toggleRole(u)">flip</Button>
-                </div>
-              </TableCell>
-              <TableCell>
-                <div class="flex max-w-[320px] flex-col gap-1">
-                  <label v-for="g in groups" :key="g.id" class="flex items-center gap-1.5 text-xs">
-                    <Checkbox
-                      :model-value="inGroup(u, g.id)"
-                      :disabled="saving === u.id"
-                      @update:model-value="toggleGroup(u, g.id)"
-                    />
-                    <span>{{ g.name }}</span>
-                  </label>
-                  <span v-if="!groups || !groups.length" class="text-xs text-muted-foreground">No groups defined.</span>
-                </div>
-              </TableCell>
-              <TableCell class="text-xs text-muted-foreground">{{ new Date(u.createdAt).toLocaleDateString('en-US') }}</TableCell>
-              <TableCell>
-                <Button size="sm" :disabled="!dirty(u) || saving === u.id" @click="save(u)">
-                  {{ saving === u.id ? 'Saving…' : 'Save' }}
-                </Button>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-        <p v-else class="p-6 text-center text-muted-foreground">No users yet.</p>
+        <DataTable
+          :columns="columns"
+          :rows="users ?? []"
+          :row-key="(u: UserWithGroupsView) => u.id"
+          empty="No users yet."
+        >
+          <template #cell-role="{ row }">
+            <div class="flex items-center gap-2">
+              <Select
+                :model-value="roleOf(row)"
+                :disabled="saving === row.id"
+                @update:model-value="setRole(row, $event)"
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">user</SelectItem>
+                  <SelectItem value="admin">admin</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="link" class="h-auto p-0 text-xs" @click="toggleRole(row)">flip</Button>
+            </div>
+          </template>
+          <template #cell-groups="{ row }">
+            <div class="flex max-w-[320px] flex-col gap-1">
+              <label v-for="g in groups" :key="g.id" class="flex items-center gap-1.5 text-xs">
+                <Checkbox
+                  :model-value="inGroup(row, g.id)"
+                  :disabled="saving === row.id"
+                  @update:model-value="toggleGroup(row, g.id)"
+                />
+                <span>{{ g.name }}</span>
+              </label>
+              <span v-if="!groups || !groups.length" class="text-xs text-muted-foreground">No groups defined.</span>
+            </div>
+          </template>
+          <template #cell-createdAt="{ row }">
+            <span class="text-xs text-muted-foreground">{{ new Date(row.createdAt).toLocaleDateString('en-US') }}</span>
+          </template>
+          <template #cell-actions="{ row }">
+            <Button size="sm" :disabled="!dirty(row) || saving === row.id" @click="save(row)">
+              {{ saving === row.id ? 'Saving…' : 'Save' }}
+            </Button>
+          </template>
+        </DataTable>
       </CardContent>
     </Card>
 

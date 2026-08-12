@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { EventView, EventStatus, EventVisibility } from '#shared/event-view'
 import type { GroupView } from '#shared/groups'
+import type { DataTableColumn } from '~/components/DataTable.vue'
 
 interface RosterEntry {
   enrollmentId: number
@@ -312,6 +313,23 @@ const statusOptions: { value: EventStatus; label: string }[] = [
   { value: 'ended', label: 'Ended' },
   { value: 'archived', label: 'Archived' },
 ]
+
+const rosterColumns: DataTableColumn[] = [
+  { key: 'studentNumber', header: 'Student ID' },
+  { key: 'name', header: 'Name' },
+  { key: 'seatLabel', header: 'Seat', class: 'text-muted-foreground' },
+  { key: 'hasKey', header: 'Stream key' },
+  { key: 'actions', header: '', headClass: 'w-0' },
+]
+
+const keyColumns: DataTableColumn[] = [
+  { key: 'streamName', header: 'Stream name' },
+  { key: 'studentLabel', header: 'Student' },
+  { key: 'tokenPreview', header: 'Preview', class: 'font-mono text-xs text-muted-foreground' },
+  { key: 'revoked', header: 'Status' },
+  { key: 'lastUsedAt', header: 'Last used', class: 'text-muted-foreground' },
+  { key: 'actions', header: '', headClass: 'w-0' },
+]
 </script>
 
 <template>
@@ -486,27 +504,20 @@ const statusOptions: { value: EventStatus; label: string }[] = [
         <div class="flex items-center justify-end gap-3">
           <Button variant="outline" :disabled="importing" @click="importRoster">{{ importing ? 'Importing…' : 'Import' }}</Button>
         </div>
-        <Table v-if="roster && roster.length">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Student ID</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Seat</TableHead>
-              <TableHead>Stream key</TableHead>
-              <TableHead class="w-0" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="r in roster" :key="r.enrollmentId">
-              <TableCell>{{ r.studentNumber }}</TableCell>
-              <TableCell>{{ r.name }}</TableCell>
-              <TableCell class="text-muted-foreground">{{ r.seatLabel ?? '—' }}</TableCell>
-              <TableCell><Badge :variant="r.hasKey ? 'success' : 'secondary'">{{ r.hasKey ? 'Generated' : 'None' }}</Badge></TableCell>
-              <TableCell><Button size="sm" variant="destructive" @click="removeEntry(r.enrollmentId)">Remove</Button></TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-        <p v-else class="p-6 text-center text-muted-foreground">No roster yet.</p>
+        <DataTable
+          :columns="rosterColumns"
+          :rows="roster ?? []"
+          :row-key="(r: RosterEntry) => r.enrollmentId"
+          empty="No roster yet."
+        >
+          <template #cell-seatLabel="{ row }">{{ row.seatLabel ?? '—' }}</template>
+          <template #cell-hasKey="{ row }">
+            <Badge :variant="row.hasKey ? 'success' : 'secondary'">{{ row.hasKey ? 'Generated' : 'None' }}</Badge>
+          </template>
+          <template #cell-actions="{ row }">
+            <Button size="sm" variant="destructive" @click="removeEntry(row.enrollmentId)">Remove</Button>
+          </template>
+        </DataTable>
       </CardContent>
     </Card>
 
@@ -548,34 +559,26 @@ const statusOptions: { value: EventStatus; label: string }[] = [
           </div>
         </details>
 
-        <Table v-if="keys && keys.length">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Stream name</TableHead>
-              <TableHead>Student</TableHead>
-              <TableHead>Preview</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Last used</TableHead>
-              <TableHead class="w-0" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="k in keys" :key="k.id">
-              <TableCell>{{ k.streamName }}</TableCell>
-              <TableCell>{{ k.studentLabel ?? '—' }}</TableCell>
-              <TableCell class="font-mono text-xs text-muted-foreground">{{ k.tokenPreview }}</TableCell>
-              <TableCell><Badge :variant="k.revoked ? 'destructive' : 'success'">{{ k.revoked ? 'Revoked' : 'Active' }}</Badge></TableCell>
-              <TableCell class="text-muted-foreground">{{ k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString('en-US', { hour12: false }) : '—' }}</TableCell>
-              <TableCell>
-                <div class="flex justify-end gap-2">
-                  <Button size="sm" variant="outline" @click="copy(k.streamName, 'Copied stream name')">Copy stream name</Button>
-                  <Button v-if="!k.revoked" size="sm" variant="destructive" @click="revokeKey(k.id)">Revoke</Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-        <p v-else class="p-6 text-center text-muted-foreground">No stream keys yet.</p>
+        <DataTable
+          :columns="keyColumns"
+          :rows="keys ?? []"
+          :row-key="(k: KeyView) => k.id"
+          empty="No stream keys yet."
+        >
+          <template #cell-studentLabel="{ row }">{{ row.studentLabel ?? '—' }}</template>
+          <template #cell-revoked="{ row }">
+            <Badge :variant="row.revoked ? 'destructive' : 'success'">{{ row.revoked ? 'Revoked' : 'Active' }}</Badge>
+          </template>
+          <template #cell-lastUsedAt="{ row }">
+            {{ row.lastUsedAt ? new Date(row.lastUsedAt).toLocaleString('en-US', { hour12: false }) : '—' }}
+          </template>
+          <template #cell-actions="{ row }">
+            <div class="flex justify-end gap-2">
+              <Button size="sm" variant="outline" @click="copy(row.streamName, 'Copied stream name')">Copy stream name</Button>
+              <Button v-if="!row.revoked" size="sm" variant="destructive" @click="revokeKey(row.id)">Revoke</Button>
+            </div>
+          </template>
+        </DataTable>
       </CardContent>
     </Card>
 

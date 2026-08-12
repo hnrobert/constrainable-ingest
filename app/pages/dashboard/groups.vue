@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { GroupView, InviteLinkView, InviteLinkInput } from '#shared/groups'
+import type { DataTableColumn } from '~/components/DataTable.vue'
 
 definePageMeta({ layout: 'default' })
 
@@ -171,6 +172,24 @@ function fmtExpires(ms: number | null): string {
 function isExpired(ms: number | null): boolean {
   return ms != null && ms < Date.now()
 }
+
+const groupColumns: DataTableColumn[] = [
+  { key: 'name', header: 'Name' },
+  { key: 'description', header: 'Description' },
+  { key: 'memberCount', header: 'Members' },
+  { key: 'createdAt', header: 'Created' },
+  { key: 'actions', header: '', headClass: 'w-0' },
+]
+
+const inviteColumns: DataTableColumn[] = [
+  { key: 'groupName', header: 'Group', class: 'font-medium' },
+  { key: 'uses', header: 'Uses' },
+  { key: 'expiresAt', header: 'Expires', class: 'text-xs text-muted-foreground' },
+  { key: 'state', header: 'State' },
+  { key: 'note', header: 'Note', class: 'text-xs text-muted-foreground' },
+  { key: 'createdAt', header: 'Created', class: 'text-xs text-muted-foreground' },
+  { key: 'actions', header: '', headClass: 'w-0' },
+]
 </script>
 
 <template>
@@ -187,46 +206,37 @@ function isExpired(ms: number | null): boolean {
     <Card>
       <CardHeader><CardTitle>Groups</CardTitle></CardHeader>
       <CardContent class="space-y-4">
-        <Table v-if="groups && groups.length">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Members</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead class="w-0" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="g in groups" :key="g.id">
-              <template v-if="editId === g.id">
-                <TableCell><Input v-model="editName" /></TableCell>
-                <TableCell><Input v-model="editDesc" placeholder="optional" /></TableCell>
-                <TableCell class="text-muted-foreground">{{ g.memberCount }}</TableCell>
-                <TableCell />
-                <TableCell>
-                  <div class="flex justify-end gap-2">
-                    <Button size="sm" @click="saveEdit(g)">Save</Button>
-                    <Button size="sm" variant="outline" @click="cancelEdit">Cancel</Button>
-                  </div>
-                </TableCell>
-              </template>
-              <template v-else>
-                <TableCell class="font-medium">{{ g.name }}</TableCell>
-                <TableCell class="text-muted-foreground">{{ g.description || '—' }}</TableCell>
-                <TableCell>{{ g.memberCount }}</TableCell>
-                <TableCell class="text-xs text-muted-foreground">{{ fmtDate(g.createdAt) }}</TableCell>
-                <TableCell>
-                  <div class="flex justify-end gap-2">
-                    <Button size="sm" variant="outline" @click="startEdit(g)">Edit</Button>
-                    <Button size="sm" variant="destructive" @click="removeGroup(g)">Delete</Button>
-                  </div>
-                </TableCell>
-              </template>
-            </TableRow>
-          </TableBody>
-        </Table>
-        <p v-else class="p-6 text-center text-muted-foreground">No groups yet.</p>
+        <DataTable
+          :columns="groupColumns"
+          :rows="groups ?? []"
+          :row-key="(g: GroupView) => g.id"
+          empty="No groups yet."
+        >
+          <template #cell-name="{ row }">
+            <Input v-if="editId === row.id" v-model="editName" />
+            <span v-else class="font-medium">{{ row.name }}</span>
+          </template>
+          <template #cell-description="{ row }">
+            <Input v-if="editId === row.id" v-model="editDesc" placeholder="optional" />
+            <span v-else class="text-muted-foreground">{{ row.description || '—' }}</span>
+          </template>
+          <template #cell-memberCount="{ row }">
+            <span :class="{ 'text-muted-foreground': editId === row.id }">{{ row.memberCount }}</span>
+          </template>
+          <template #cell-createdAt="{ row }">
+            <span v-if="editId !== row.id" class="text-xs text-muted-foreground">{{ fmtDate(row.createdAt) }}</span>
+          </template>
+          <template #cell-actions="{ row }">
+            <div v-if="editId === row.id" class="flex justify-end gap-2">
+              <Button size="sm" @click="saveEdit(row)">Save</Button>
+              <Button size="sm" variant="outline" @click="cancelEdit">Cancel</Button>
+            </div>
+            <div v-else class="flex justify-end gap-2">
+              <Button size="sm" variant="outline" @click="startEdit(row)">Edit</Button>
+              <Button size="sm" variant="destructive" @click="removeGroup(row)">Delete</Button>
+            </div>
+          </template>
+        </DataTable>
 
         <div class="flex flex-wrap items-center gap-2">
           <Input v-model="newGroupName" placeholder="New group name" class="min-w-45 flex-1" @keyup.enter="createGroup" />
@@ -251,41 +261,37 @@ function isExpired(ms: number | null): boolean {
           <Button variant="link" class="h-auto p-0 text-xs" @click="copyInvite(lastInviteUrl)">Copy</Button>
         </div>
 
-        <Table v-if="invites && invites.length">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Group</TableHead>
-              <TableHead>Uses</TableHead>
-              <TableHead>Expires</TableHead>
-              <TableHead>State</TableHead>
-              <TableHead>Note</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead class="w-0" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="inv in invites" :key="inv.id">
-              <TableCell class="font-medium">{{ inv.groupName }}</TableCell>
-              <TableCell>{{ inv.usedCount }}{{ inv.maxUses != null ? ' / ' + inv.maxUses : ' / ∞' }}</TableCell>
-              <TableCell class="text-xs text-muted-foreground">{{ fmtExpires(inv.expiresAt) }}</TableCell>
-              <TableCell>
-                <Badge v-if="!inv.active" variant="destructive">inactive</Badge>
-                <Badge v-else-if="isExpired(inv.expiresAt)" variant="destructive">expired</Badge>
-                <Badge v-else-if="inv.maxUses != null && inv.usedCount >= inv.maxUses" variant="warning">exhausted</Badge>
-                <Badge v-else variant="success">active</Badge>
-              </TableCell>
-              <TableCell class="text-xs text-muted-foreground">{{ inv.note || '—' }}</TableCell>
-              <TableCell class="text-xs text-muted-foreground">{{ fmtDate(inv.createdAt) }}</TableCell>
-              <TableCell>
-                <div class="flex justify-end gap-2">
-                  <Button variant="link" class="h-auto p-0 text-xs" @click="copyInvite(inviteUrl(inv.code))">Copy link</Button>
-                  <Button size="sm" variant="destructive" @click="removeInvite(inv)">Delete</Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-        <p v-else class="p-6 text-center text-muted-foreground">No invite links yet.</p>
+        <DataTable
+          :columns="inviteColumns"
+          :rows="invites ?? []"
+          :row-key="(inv: InviteLinkView) => inv.id"
+          empty="No invite links yet."
+        >
+          <template #cell-uses="{ row }">
+            {{ row.usedCount }}{{ row.maxUses != null ? ' / ' + row.maxUses : ' / ∞' }}
+          </template>
+          <template #cell-expiresAt="{ row }">
+            {{ fmtExpires(row.expiresAt) }}
+          </template>
+          <template #cell-state="{ row }">
+            <Badge v-if="!row.active" variant="destructive">inactive</Badge>
+            <Badge v-else-if="isExpired(row.expiresAt)" variant="destructive">expired</Badge>
+            <Badge v-else-if="row.maxUses != null && row.usedCount >= row.maxUses" variant="warning">exhausted</Badge>
+            <Badge v-else variant="success">active</Badge>
+          </template>
+          <template #cell-note="{ row }">
+            {{ row.note || '—' }}
+          </template>
+          <template #cell-createdAt="{ row }">
+            {{ fmtDate(row.createdAt) }}
+          </template>
+          <template #cell-actions="{ row }">
+            <div class="flex justify-end gap-2">
+              <Button variant="link" class="h-auto p-0 text-xs" @click="copyInvite(inviteUrl(row.code))">Copy link</Button>
+              <Button size="sm" variant="destructive" @click="removeInvite(row)">Delete</Button>
+            </div>
+          </template>
+        </DataTable>
 
         <div v-if="groups && groups.length" class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] items-end gap-3">
           <div class="space-y-1.5">

@@ -10,6 +10,15 @@ export default defineNuxtConfig({
   // Tailwind v4 (CSS-first) via the Vite plugin — NOT @nuxtjs/tailwindcss.
   vite: {
     plugins: [tailwindcss()],
+    server: {
+      // Vite's Host check 403s any caller that isn't localhost/127.0.0.1.
+      // Allow `host.docker.internal` so a Dockerized SRS's on_publish hook can
+      // call back into the dev app during OBS ingest testing. To actually
+      // receive that call the dev server must also bind off-loopback — run
+      // `HOST=0.0.0.0 bun run dev`. Production (the `app` container) is
+      // unaffected (SRS reaches it on the compose bridge as `app:3000`).
+      allowedHosts: ['host.docker.internal'],
+    },
   },
 
   // shadcn-vue ui/ components resolve UNPREFIXED (<Button>, <Card>, …);

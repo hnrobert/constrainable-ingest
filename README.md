@@ -15,28 +15,26 @@ compliant streams to MP4, discard non-compliant.
 ## Stack
 
 | Layer | Choice |
-|---|---|
+| --- | --- |
 | Runtime / framework | **Nuxt 4** (`app/`) on **Bun**, Nitro `node-server` preset, SSR single process |
 | DB | **SQLite** (`bun:sqlite`) + **Drizzle ORM**, `drizzle-kit push` auto-sync (no migration files) |
 | Auth | Admin login (argon2id, HttpOnly signed cookie) + viewer passphrase gate |
-| Realtime | **Socket.IO** standalone on `SOCKET_PORT` (dev + prod) |
+| Realtime | **Socket.IO**, same-origin on the app HTTP server (lazy-attach; dev + prod) |
 | Media | SRS (RTMP) + HTTP-FLV playback (mpegts.js) with optional WebRTC (WHEP) |
-| Deploy | `docker compose`: `app` + `srs` (ossrs/srs:7), single machine, intranet, HTTP |
+| Deploy | `docker compose`: `app` + `srs` (ossrs/srs:6), single machine, intranet, HTTP |
 
 ## Quick start (dev)
 
 ```bash
 bun install
-bun run dev          # http://localhost:3000  (socket.io on :3001)
+bun run dev          # http://localhost:3025  (socket.io, same-origin)
 ```
 
-On first boot the DB auto-syncs and seeds: a default event, the app config, and
-an admin user. If `ADMIN_PASSWORD` is unset, a random one is **printed to the
-logs** (and audited). Set it explicitly in dev:
-
-```bash
-ADMIN_PASSWORD=choose bun run dev
-```
+On first boot the DB auto-syncs its **schema** (`drizzle-kit push`) but seeds
+**nothing** — there is no `ADMIN_PASSWORD` env. Register at the panel to create
+the admin: when no users exist the app is in **bootstrap mode** and the first
+registration becomes the super-admin (the email allowlist is bypassed). Events,
+roster, and stream keys are then created through the UI.
 
 ## Production (Docker)
 
@@ -47,14 +45,12 @@ Single machine, intranet, no reverse proxy, no TLS. Set your LAN/public IP as
 cd docker
 echo "PUBLIC_HOST=192.168.1.10"            >> .env
 echo "SESSION_SECRET=$(openssl rand -hex 32)" >> .env
-echo "ADMIN_PASSWORD=choose"               >> .env
 docker compose up -d --build
 ```
 
 | Port | Service | Purpose |
-|---|---|---|
-| 3000 | app | admin panel + API (SSR) |
-| 3001 | app | Socket.IO (realtime panel) |
+| --- | --- | --- |
+| 3000 | app | admin panel + API (SSR) + Socket.IO (same origin) |
 | 1935 | srs | RTMP ingest (OBS target) |
 | 8080 | srs | HTTP-FLV playback (browser → SRS) |
 | 1985 | srs | HTTP API + WHEP |
@@ -92,7 +88,7 @@ camera/LAN). With `docker compose up` running:
 
 ## Layout
 
-```
+```bash
 app/          Vue UI (pages, components, composables, layouts, middleware)
 server/       Nitro: api/, services/, database/ (schema + Drizzle), plugins/, middleware/, utils/
 shared/       types shared between app and server (config, events, event-view, recordings)
