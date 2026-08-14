@@ -41,4 +41,8 @@ export const UsersRepository = {
   updatePassword(id: number, passwordHash: string): void {
     db.update(users).set({ passwordHash }).where(eq(users.id, id)).run()
   },
+  /** Store/rotate the RTMP authmod verifier (stable salt + AES ciphertext). */
+  setAuthmod(id: number, salt: string, verifierCipher: string): void {
+    db.update(users).set({ authmodSalt: salt, authmodVerifier: verifierCipher }).where(eq(users.id, id)).run()
+  },
 }

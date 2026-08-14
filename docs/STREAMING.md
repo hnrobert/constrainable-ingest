@@ -12,7 +12,7 @@ flowchart TD
     OBS["OBS (publisher)"]
     SRS["SRS :1935"]
 
-    subgraph app ["app :3000"]
+    subgraph app ["app :31954"]
         PUB["on_publish hook"]
         AUTH["authorizePublish()"]
         SESS["insert publish_session<br/>emit session:start"]
@@ -123,7 +123,7 @@ three-connection challenge-response dance** — this is exactly the mechanism Da
 The username appears from conn 2; a password-derived `response` from conn 3. The
 password itself never travels — only
 
-```
+```text
 response = base64( md5( base64(md5(user + salt + password)) + opaque + challenge ) )
 ```
 
@@ -337,6 +337,6 @@ volume (e.g. the auth-mode cascade above).
   bytes)`).
 - **Inter-container traffic** uses compose service names (`srs`, `app`) over the
   isolated `ingest` bridge network — never host ports/localhost. Host ports are
-  published only for things outside the containers: the browser (app :3000, SRS
+  published only for things outside the containers: the browser (app :31954, SRS
   FLV :8080 / WHEP :1985) and OBS (RTMP :1935). `PUBLIC_HOST` is the
   browser-visible IP for playback URLs only.

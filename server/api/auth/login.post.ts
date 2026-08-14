@@ -7,6 +7,7 @@
 import { createError } from 'h3'
 import { UsersRepository } from '../../repositories/users.repository'
 import { hashPassword, isLegacyHash, verifyPassword } from '../../utils/password'
+import { mintAuthmod } from '../../utils/authmod'
 import { rsaDecrypt } from '../../utils/rsa'
 import { createSessionCookie } from '../../utils/session'
 import { audit } from '../../services/audit'
@@ -38,6 +39,14 @@ export default defineEventHandler(async (event) => {
   // Upgrade a legacy Bun.password hash to the new salt:hex format, in place.
   if (isLegacyHash(user.passwordHash)) {
     UsersRepository.updatePassword(user.id, hashPassword(plain))
+  }
+
+  // Lazily mint the RTMP authmod verifier for accounts created before this
+  // column existed. Plaintext `plain` is in scope here; there is no password-
+  // change endpoint, so this runs at most once per user.
+  if (!user.authmodVerifier) {
+    const authmod = mintAuthmod(user.email, plain)
+    UsersRepository.setAuthmod(user.id, authmod.salt, authmod.verifierCipher)
   }
 
   const cookie = await createSessionCookie(user.id, user.role)

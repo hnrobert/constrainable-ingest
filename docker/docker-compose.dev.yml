@@ -1,0 +1,22 @@
+# Hybrid dev override: expose SRS RTMP on host :11935 so the host-run gateway
+# (go run ./rtmp-gateway, owning dev :1935) can relay to it. This lets OBS use the
+# portless `rtmp://localhost/live` against the dev gateway. http_hooks point at
+# the HOST-run dev app via host.docker.internal (already in nuxt vite allowedHosts).
+# Bring up SRS only:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up srs
+#   RTMP_LISTEN=:1935 SRS_ADDR=localhost:11935 APP_BASE=http://localhost:31954 \
+#     RTMP_AUTH_TOKEN=dev-insecure-rtmp-token go run ./rtmp-gateway
+#   bun run dev --port 31954   # with RTMP_AUTH_TOKEN + SRS_RTMP_HOST=127.0.0.1:11935
+#
+# (Requires docker compose v2.24+ for the `!override` tag.)
+services:
+  srs:
+    environment:
+      # http_hooks → the host-run dev app (Vite/Nitro on :31954), not the app container
+      BACKEND: "host.docker.internal:31954"
+    ports: !override
+      - "11935:1935"   # SRS RTMP, remapped off 1935 so the dev gateway can own :1935
+      - "1985:1985"   # HTTP API + WHEP
+      - "8080:8080"   # HTTP-FLV / HLS
+      - "8000:8000/udp" # WebRTC

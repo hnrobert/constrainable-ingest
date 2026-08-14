@@ -90,6 +90,7 @@ const settingsDirty = computed(() => {
     s.description !== e.description ||
     s.status !== e.status ||
     s.recordEnabled !== e.recordEnabled ||
+    s.requireAccountAuth !== e.requireAccountAuth ||
     s.visibility !== e.visibility ||
     s.streamGuide !== e.streamGuide
   return scalarChanged || !sameSet(selectedGroupIds.value, e.groups.map((g) => g.id))
@@ -117,6 +118,7 @@ async function saveSettings(): Promise<boolean> {
         description: s.description,
         status: s.status,
         recordEnabled: s.recordEnabled,
+        requireAccountAuth: s.requireAccountAuth,
         visibility: s.visibility,
         streamGuide: s.streamGuide,
         groupIds: selectedGroupIds.value,
@@ -526,6 +528,17 @@ const keyColumns: DataTableColumn[] = [
             <Checkbox v-model="settings.recordEnabled" />
             <span class="text-sm">Enable recording</span>
           </div>
+          <div class="flex items-center gap-2 self-end pb-1 sm:col-span-2">
+            <Checkbox v-model="settings.requireAccountAuth" />
+            <span class="text-sm">
+              Require OBS account authentication
+              <span class="block text-xs text-muted-foreground">
+                With this on, contestants must enter their website email + password in OBS'
+                "Use authentication" fields (verified by the RTMP gateway). Everyone keeps Use
+                authentication ON — with this off, any credentials (e.g. live/live) are accepted.
+              </span>
+            </span>
+          </div>
           <div v-if="settings.visibility === 'groups'" class="space-y-1.5 sm:col-span-2">
             <Label>Allowed groups</Label>
             <div class="flex flex-col gap-2">
@@ -621,9 +634,9 @@ const keyColumns: DataTableColumn[] = [
         <p class="text-xs text-muted-foreground">
           One shared key per event, shown in full on the
           <NuxtLink :to="`/e/${event.slug}`" target="_blank" class="underline hover:text-primary">participant guide</NuxtLink>.
-          Each contestant pastes it as <code class="font-mono">&lt;their-email&gt;?token=&lt;key&gt;</code> — the stream NAME
-          is their own account email (unique per person), so the whole class can stream at once. This is distinct from
-          the hashed publish token above.
+          Contestants paste it as the OBS stream key ALONE — the RTMP gateway derives each publisher's stream name
+          (their account email when authenticated, else the connection IP), so the whole class can stream at once.
+          This is distinct from the hashed publish token above.
         </p>
 
         <div v-if="currentPublishKey" class="space-y-1 rounded-md border border-ok/50 p-3 text-sm">
@@ -638,8 +651,9 @@ const keyColumns: DataTableColumn[] = [
             <Button variant="link" class="h-auto p-0 text-xs" @click="copy(obs.server.value, 'Copied server address')">Copy</Button>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <span class="min-w-20 text-xs text-muted-foreground">Stream key example</span>
-            <code class="font-mono text-xs">{{ obs.streamKey('account@example.com', currentPublishKey) }}</code>
+            <span class="min-w-20 text-xs text-muted-foreground">Stream key</span>
+            <code class="font-mono text-xs">{{ currentPublishKey }}</code>
+            <span class="text-xs text-muted-foreground">(the key itself — no username prefix)</span>
           </div>
         </div>
 

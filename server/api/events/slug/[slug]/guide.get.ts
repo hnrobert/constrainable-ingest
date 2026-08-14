@@ -29,17 +29,24 @@ export default defineEventHandler((event) => {
   }
 
   const cfg = useRuntimeConfig(event)
-  const server = `rtmp://${cfg.public.srsPublicHost}:${cfg.public.srsRtmpPort}/live`
+  // RTMP's default port is 1935, so when the ingest front-door (the RTMP gateway)
+  // owns 1935 we omit it — contestants paste a clean `rtmp://host/live` with no
+  // port. One URL for ALL events: the gateway challenges every publisher, and
+  // clients without credentials (requireAccountAuth off) pass through openly —
+  // auth-required events are enforced at publish via the per-event policy.
+  const rtmpPort = Number(cfg.public.srsRtmpPort) || 1935
+  const hostPort = rtmpPort === 1935 ? cfg.public.srsPublicHost : `${cfg.public.srsPublicHost}:${rtmpPort}`
+  const server = `rtmp://${hostPort}/live`
 
   return {
     name: row.name,
     slug: row.slug,
     server,
     publishKey: row.publishKey ?? null,
-    streamNameHint: 'your account email',
     limits: getLimitsFor(row),
     startsAt: row.startsAt ? row.startsAt.getTime() : null,
     endsAt: row.endsAt ? row.endsAt.getTime() : null,
+    requireAccountAuth: row.requireAccountAuth,
     streamGuide: row.streamGuide ?? null,
   } satisfies EventGuide
 })

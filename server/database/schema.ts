@@ -16,6 +16,17 @@ export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
+  /**
+   * Adobe RTMP `authmod` account-auth (optional). When a publisher authenticates
+   * via OBS "Use authentication", the server needs `salted2 =
+   * base64(md5(email + salt + password))` to verify the response. `salt` is a
+   * stable query-safe per-user value; the verifier is stored as AES-256-GCM
+   * ciphertext (a password-equivalent — must not leak from a bare DB dump).
+   * Minted at registration (plaintext in scope) and lazily backfilled on login.
+   * See server/utils/authmod.ts + docs/STREAMING.md.
+   */
+  authmodSalt: text('authmod_salt'),
+  authmodVerifier: text('authmod_verifier'),
   /** admin = full management + watching; user = browse authorized events only. */
   role: text('role', { enum: ['admin', 'user'] }).notNull().default('user'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(now),
@@ -44,6 +55,13 @@ export const events = sqliteTable(
     /** JSON: per-event limits override (null fields = inherit global) */
     limitsOverride: text('limits_override'),
     recordEnabled: integer('record_enabled', { mode: 'boolean' }).notNull().default(true),
+    /**
+     * When true, OBS publishers must authenticate with their website account
+     * (email + login password) via OBS' native "Use authentication" fields. The
+     * Go RTMP gateway front-door performs the Adobe authmod challenge-response;
+     * SRS still does event auth (publish key) via on_publish, unchanged.
+     */
+    requireAccountAuth: integer('require_account_auth', { mode: 'boolean' }).notNull().default(false),
     /**
      * Who may see this event in catalogs/details:
      *   public     — anyone (incl. outsiders, on the homepage)

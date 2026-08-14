@@ -22,7 +22,7 @@ RUN apt-get update \
 WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
-    PORT=3000 \
+    PORT=31954 \
     TZ=Asia/Shanghai
 
 # Nitro bundles the server app into .output (self-contained). We additionally
@@ -35,7 +35,7 @@ COPY --from=build /app/drizzle.config.ts /app/drizzle.config.ts
 COPY --from=build /app/server/database/schema.ts /app/server/database/schema.ts
 
 VOLUME ["/app/data", "/app/records"]
-EXPOSE 3000
+EXPOSE 31954
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["bun", "/app/.output/server/index.mjs"]

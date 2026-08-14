@@ -1,6 +1,10 @@
 {
     "cSpell.words": [
+        "authmod",
+        "behavior",
+        "conn",
         "constrainable",
+        "creds",
         "enrollment",
         "envsubst",
         "ffprobe",
@@ -8,10 +12,14 @@
         "gotchas",
         "icpc",
         "incl",
+        "librtmp",
         "libsql",
+        "Lpde",
         "lucide",
         "mpegts",
         "NAPI",
+        "needauth",
+        "nuxi",
         "Nuxt",
         "onwarn",
         "ossrs",
@@ -27,6 +35,9 @@
         "textareas",
         "UNPUB",
         "vueuse",
-        "WHEP"
+        "WHEP",
+        "Wowza",
+        "wqqu",
+        "zcws"
     ]
 }

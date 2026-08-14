@@ -23,6 +23,11 @@ export interface EventView {
   status: Event['status']
   limitsOverride: LimitsOverride | null
   recordEnabled: boolean
+  /**
+   * When true, OBS publishers must authenticate with their website account via
+   * the Go RTMP gateway (authmod challenge-response); SRS event auth unchanged.
+   */
+  requireAccountAuth: boolean
   visibility: EventVisibility
   /** groups linked to this event (meaningful when visibility === 'groups'). */
   groups: EventGroupRef[]
@@ -45,6 +50,8 @@ export interface EventInput {
   status?: Event['status']
   limitsOverride?: LimitsOverride | null
   recordEnabled?: boolean
+  /** toggles OBS "Use authentication" enforcement (account auth via the gateway). */
+  requireAccountAuth?: boolean
   visibility?: EventVisibility
   /** admin-authored custom instructions shown on the participant guide. */
   streamGuide?: string | null
@@ -64,6 +71,7 @@ function toView(e: Event): EventView {
     status: e.status,
     limitsOverride: e.limitsOverride ? (JSON.parse(e.limitsOverride) as LimitsOverride) : null,
     recordEnabled: e.recordEnabled,
+    requireAccountAuth: e.requireAccountAuth,
     visibility: e.visibility,
     groups: groupRows.map((g) => ({ id: g.id, name: g.name })),
     publishTokenPreview: e.publishTokenPrefix ?? null,
@@ -159,6 +167,7 @@ export function updateEvent(id: number, patch: EventInput): EventView {
   if (patch.endsAt !== undefined) set.endsAt = toTs(patch.endsAt)
   if (patch.status != null) set.status = patch.status
   if (patch.recordEnabled != null) set.recordEnabled = patch.recordEnabled
+  if (patch.requireAccountAuth != null) set.requireAccountAuth = patch.requireAccountAuth
   if (patch.visibility != null) set.visibility = patch.visibility
   if (patch.limitsOverride !== undefined) {
     set.limitsOverride =
@@ -254,11 +263,12 @@ export function clearPublishToken(id: number): void {
  * is validated and stored verbatim; without it a random one is generated. Unlike
  * the publish token, this key is stored in plaintext so it can be redisplayed on
  * the participant guide — it is a shared credential handed to everyone allowed
- * to view the event, not a per-person secret. A publisher then pushes
- * `${accountEmail}?token=${publishKey}`: the stream NAME is the contestant's
- * account email (unique per person), so the whole class can stream concurrently
+ * to view the event, not a per-person secret. A publisher pastes the key as the
+ * OBS stream key ALONE; the RTMP gateway derives the stream NAME per publisher
+ * (authenticated account email, else connection IP) and relays
+ * `<name>?token=<publishKey>` to SRS, so the whole class can stream concurrently
  * with one shared key. Reuses the publish-token charset/length rules so the key
- * round-trips cleanly through OBS → SRS → parseToken.
+ * round-trips cleanly through OBS → gateway → SRS → parseToken.
  */
 export async function setPublishKey(
   id: number,

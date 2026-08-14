@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
  * Participant push-streaming guide for one event, keyed by slug. Identical for
- * every viewer of the same event. The organizer's shared publish key is shown in
- * full; each contestant pastes it as the `?token=` part of the OBS stream key and
- * uses their OWN account email as the stream name (unique per person, so the
- * whole class can stream concurrently with one shared key).
+ * every viewer of the same event. The organizer's shared publish key IS the OBS
+ * stream key — no username prefix. The RTMP gateway derives each publisher's
+ * stream name (their account email when authenticated, else the connection IP),
+ * so the whole class streams concurrently with one shared key.
  */
 import type { EventGuide } from '#shared/event-view'
 
@@ -29,20 +29,6 @@ const unauthorized = computed(() => statusCode.value === 403)
 
 const publishKey = computed(() => guide.value?.publishKey ?? null)
 const email = computed(() => user.value?.email ?? null)
-/** ready-to-paste key when the viewer is signed in */
-const myStreamKey = computed(() =>
-  email.value && publishKey.value ? `${email.value}?token=${publishKey.value}` : null,
-)
-/** template shown to everyone (placeholder for the account email) */
-const streamKeyTemplate = computed(() =>
-  publishKey.value ? `<your-account-email>?token=${publishKey.value}` : null,
-)
-/** whichever stream key to render/copy in the current state */
-const displayStreamKey = computed(() => myStreamKey.value ?? streamKeyTemplate.value)
-
-const ffmpegCmd = computed(
-  () => `ffmpeg -re -i your-video.mp4 -c copy -f flv "${displayStreamKey.value ?? ''}"`,
-)
 
 async function copy(text: string, label = 'Copied'): Promise<void> {
   try {
@@ -111,17 +97,53 @@ function fmt(ts: number | null): string {
             <div class="space-y-1.5">
               <Label>Stream key</Label>
               <div class="flex flex-wrap items-center gap-2">
-                <code class="break-all font-mono text-sm">{{ displayStreamKey }}</code>
-                <Button variant="link" class="h-auto p-0 text-xs" @click="copy(displayStreamKey ?? '', 'Copied stream key')">Copy</Button>
+                <code class="break-all font-mono text-sm">{{ publishKey }}</code>
+                <Button variant="link" class="h-auto p-0 text-xs" @click="copy(publishKey ?? '', 'Copied stream key')">Copy</Button>
               </div>
-              <p v-if="myStreamKey" class="text-xs text-muted-foreground">
-                This uses your account email (<code>{{ email }}</code>) as the stream name.
-              </p>
-              <p v-else class="text-xs text-muted-foreground">
-                Replace <code>&lt;your-account-email&gt;</code> with the email you signed up with — each
-                contestant uses their own email as the stream name, so everyone can stream at the same time.
+              <p class="text-xs text-muted-foreground">
+                Paste the key as-is — the server identifies you automatically (by your OBS sign-in when
+                authentication is enabled for this event).
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        <!-- OBS authentication — required for EVERYONE (the server challenges
+             all publishers); what differs is whether real account credentials
+             are needed for this event -->
+        <Card>
+          <CardHeader><CardTitle>OBS authentication</CardTitle></CardHeader>
+          <CardContent class="space-y-3">
+            <p class="text-sm text-muted-foreground">
+              The server challenges every publisher, so <strong>Use authentication</strong> in
+              <strong>Settings → Stream</strong> must be ON. What to enter depends on this event:
+            </p>
+            <template v-if="guide.requireAccountAuth">
+              <div class="space-y-1.5">
+                <Label>Username</Label>
+                <div class="flex items-center gap-2">
+                  <code class="font-mono text-sm">{{ email ?? '<your-account-email>' }}</code>
+                  <Button v-if="email" variant="link" class="h-auto p-0 text-xs" @click="copy(email ?? '', 'Copied username')">Copy</Button>
+                </div>
+                <p class="text-xs text-muted-foreground">Your account email.</p>
+              </div>
+              <div class="space-y-1.5">
+                <Label>Password</Label>
+                <p class="text-sm text-muted-foreground">
+                  Your website login password. It is never sent in plain text — OBS proves it
+                  to the server through a challenge-response.
+                </p>
+              </div>
+            </template>
+            <template v-else>
+              <div class="space-y-1.5">
+                <Label>Username / Password</Label>
+                <p class="text-sm text-muted-foreground">
+                  Anything — e.g. <code>live</code> / <code>live</code>. This event doesn't
+                  verify accounts; the fields just need to be filled for OBS to connect.
+                </p>
+              </div>
+            </template>
           </CardContent>
         </Card>
 
@@ -166,20 +188,24 @@ function fmt(ts: number | null): string {
             <ol class="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
               <li>Open OBS Studio → <strong>Settings → Stream</strong>.</li>
               <li>Set <strong>Service</strong> to <em>Custom…</em> and paste the <strong>Server</strong> above.</li>
-              <li>Paste your <strong>Stream key</strong> above.</li>
+              <li>Paste the <strong>Stream key</strong> above.</li>
+              <li>
+                Turn on <strong>Use authentication</strong> and enter
+                <template v-if="guide.requireAccountAuth">
+                  your <strong>account email</strong> and <strong>website password</strong>
+                </template>
+                <template v-else>
+                  any username/password (e.g. <code>live</code> / <code>live</code>)
+                </template>
+                — see the OBS authentication card.
+              </li>
               <li>In <strong>Settings → Video / Output</strong>, keep resolution, FPS, and bitrate within the recommended values.</li>
               <li>Click <strong>Start Streaming</strong>. Your stream appears once it connects.</li>
             </ol>
-          </CardContent>
-        </Card>
-
-        <!-- ffmpeg alternative -->
-        <Card>
-          <CardHeader><CardTitle>Alternative: ffmpeg</CardTitle></CardHeader>
-          <CardContent class="space-y-2">
-            <p class="text-xs text-muted-foreground">If you prefer the command line:</p>
-            <pre class="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs"><code>{{ ffmpegCmd }}</code></pre>
-            <Button variant="link" class="h-auto p-0 text-xs" @click="copy(ffmpegCmd, 'Copied ffmpeg command')">Copy</Button>
+            <p class="mt-3 text-xs text-muted-foreground">
+              OBS Studio is required — the server authenticates every publisher during connection, which
+              plain command-line tools (e.g. stock ffmpeg) don't support.
+            </p>
           </CardContent>
         </Card>
       </template>

@@ -23,7 +23,7 @@
  *   bun run scripts/stress-streams.ts --ramp 5,10,20,40,60 --mode open
  *   bun run scripts/stress-streams.ts --count 30 --mode auth --hold 30
  *
- * Defaults target the local compose stack (app :3000, SRS RTMP :1935, SRS API
+ * Defaults target the local compose stack (app :31954, SRS RTMP :1935, SRS API
  * :1985, admin uid 1, dev session secret). Flags let you retarget another env.
  */
 import { SignJWT } from 'jose'
@@ -52,7 +52,7 @@ function parseArgs(): Args {
     hold: 15,
     clip: '/tmp/test-stream.mp4',
     rtmp: 'rtmp://127.0.0.1:1935/live',
-    app: 'http://127.0.0.1:3000',
+    app: 'http://127.0.0.1:31954',
     srs: 'http://127.0.0.1:1985',
     secret: process.env.SESSION_SECRET || 'dev-insecure-secret-change-me',
     uid: Number(process.env.STRESS_ADMIN_UID || 1),
@@ -79,7 +79,7 @@ function parseArgs(): Args {
   --mode auth|open   auth = per-event publish token (default); open = rejectUnknownPublishers=false
   --hold SEC         seconds to hold streams while sampling (default 15)
   --clip PATH        source clip (default /tmp/test-stream.mp4)
-  --app URL          app base (default http://127.0.0.1:3000)
+  --app URL          app base (default http://127.0.0.1:31954)
   --srs URL          SRS HTTP API base (default http://127.0.0.1:1985)
   --rtmp URL         RTMP target without stream key (default rtmp://127.0.0.1:1935/live)
   --secret STR       session signing secret (default $SESSION_SECRET or dev secret)

@@ -12,6 +12,7 @@
 import { createError } from 'h3'
 import { UsersRepository } from '../../repositories/users.repository'
 import { hashPassword } from '../../utils/password'
+import { mintAuthmod } from '../../utils/authmod'
 import { rsaDecrypt } from '../../utils/rsa'
 import { createSessionCookie } from '../../utils/session'
 import { audit } from '../../services/audit'
@@ -73,7 +74,12 @@ export default defineEventHandler(async (event) => {
 
   const role = isFirst ? 'admin' : 'user'
   const passwordHash = hashPassword(password)
-  const user = UsersRepository.insert({ email, passwordHash, role })
+  // RTMP authmod verifier: base64(md5(email+salt+password)), AES-encrypted at
+  // rest. Minted now (plaintext `password` is in scope) so OBS "Use
+  // authentication" can later prove account ownership without the password ever
+  // traveling. See server/utils/authmod.ts.
+  const authmod = mintAuthmod(email, password)
+  const user = UsersRepository.insert({ email, passwordHash, role, authmodSalt: authmod.salt, authmodVerifier: authmod.verifierCipher })
 
   // Best-effort invite consumption: join the invite's group if the code is valid.
   // An invalid/expired invite must NOT block registration — just skip it.

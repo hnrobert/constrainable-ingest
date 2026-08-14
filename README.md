@@ -50,7 +50,7 @@ docker compose up -d --build
 
 | Port | Service | Purpose |
 | --- | --- | --- |
-| 3000 | app | admin panel + API (SSR) + Socket.IO (same origin) |
+| 31954 | app | admin panel + API (SSR) + Socket.IO (same origin) |
 | 1935 | srs | RTMP ingest (OBS target) |
 | 8080 | srs | HTTP-FLV playback (browser → SRS) |
 | 1985 | srs | HTTP API + WHEP |
@@ -58,14 +58,14 @@ docker compose up -d --build
 
 `docker/srs-entrypoint.sh` substitutes the WebRTC `candidate` from
 `PUBLIC_HOST` into `srs.conf` at startup (the stock ossrs image won't envsubst a
-mounted config). http_hooks point at the compose hostname `app:3000`.
+mounted config). http_hooks point at the compose hostname `app:31954`.
 
 ## End-to-end smoke test (OBS → SRS → app)
 
 This is the deploy-time verification the code can't self-test (needs OBS + a
 camera/LAN). With `docker compose up` running:
 
-1. **Create an event + roster + keys.** Log in (`http://<PUBLIC_HOST>:3000`),
+1. **Create an event + roster + keys.** Log in (`http://<PUBLIC_HOST>:31954`),
    go to **Events**, create an event, paste a CSV roster
    (`student_id,name[,email][,seat]`), and **bulk-generate** keys. Copy a student's OBS
    config: server `rtmp://<PUBLIC_HOST>:1935/live`, key `<streamName>?token=…`.
@@ -80,7 +80,7 @@ camera/LAN). With `docker compose up` running:
    a restart.
 6. **Reject off-roster** — push with an unknown/revoked token: `on_publish`
    returns `200` body `"1"` and SRS drops the stream (audited).
-7. **Viewer** — open `http://<PUBLIC_HOST>:3000/viewer`, pick the live event
+7. **Viewer** — open `http://<PUBLIC_HOST>:31954/viewer`, pick the live event
    (enter its passphrase if protected), and watch via FLV (WebRTC toggle
    optional). The browser connects to SRS directly (CORS handled by `srs.conf`).
 8. **Retention** — set `retentionDays`; the next sweep deletes older recordings

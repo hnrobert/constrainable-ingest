@@ -1,15 +1,25 @@
-# Single-machine intranet deployment: app + SRS, no reverse proxy, no TLS.
+# Single-machine intranet deployment: app + RTMP gateway + SRS, no TLS.
 #
 # Network model:
-#   - The two containers talk to each other over an ISOLATED bridge network
+#   - The three containers talk to each other over an ISOLATED bridge network
 #     (`ingest`) using compose service names + container ports — never the host
-#     ports/localhost. app → http://srs:1985 (API) and rtmp://srs/... (pull);
-#     srs → http://app:3000/api/srs/* (http_hooks).
+#     ports/localhost. rtmp-gateway → http://app:31954/api/srs/rtmp-auth/* (auth)
+#     and rtmp://srs:1935 (relay); app → http://srs:1985 (API) + rtmp://srs/...
+#     (pull); srs → http://app:31954/api/srs/* (http_hooks).
 #   - Host ports below are published ONLY for things that live OUTSIDE the
-#     containers: the browser (app :3000, which also serves Socket.IO at
-#     /socket.io/, and SRS FLV :8080 / WHEP :1985) and OBS (RTMP :1935).
-#     PUBLIC_HOST is the browser-visible host IP for playback URLs — it is NOT
-#     used for inter-container traffic.
+#     containers: the browser (app :31954, which also serves Socket.IO at
+#     /socket.io/, and SRS FLV :8080 / WHEP :1985) and OBS (RTMP :1935, served by
+#     the gateway). PUBLIC_HOST is the browser-visible host IP for playback URLs —
+#     it is NOT used for inter-container traffic.
+#
+# RTMP ingress: the `rtmp-gateway` owns host :1935 and is OBS' front-door, on a
+# SINGLE URL (rtmp://host/live) for all events. It challenges every publisher
+# with the Adobe authmod dance (password never travels); clients without
+# credentials configured pass through openly. At publish, the gateway asks the
+# app whether the key's event requires account auth (per-event
+# requireAccountAuth) and rejects unauthenticated pushes, and authed publishers
+# must publish under their own account email. Users publishing with account auth
+# must have signed in at least once so the app has stored their authmod verifier.
 services:
   app:
     build:
@@ -19,7 +29,7 @@ services:
     container_name: ingest-app
     environment:
       HOST: 0.0.0.0
-      PORT: "3000"
+      PORT: "31954"
       NODE_ENV: production
       TZ: ${TZ:-Asia/Shanghai}
       # storage
@@ -35,11 +45,37 @@ services:
       FFPROBE_PATH: ffprobe
       # auth
       SESSION_SECRET: ${SESSION_SECRET:-changeme-change-me}
+      # AES-256-GCM key encrypting the stored authmod verifier (per-user)
+      AUTHMOD_VERIFIER_SECRET: ${AUTHMOD_VERIFIER_SECRET:-change-me-to-a-long-random-string}
+      # shared secret guarding the internal salt/verify endpoints (app <-> gateway)
+      RTMP_AUTH_TOKEN: ${RTMP_AUTH_TOKEN:-change-me-to-a-long-random-string}
     volumes:
       - ../data:/app/data
       - ../records:/app/records
     ports:
-      - "3000:3000"   # app + Socket.IO (same origin, /socket.io/)
+      - "31954:31954"   # app + Socket.IO (same origin, /socket.io/)
+    networks:
+      - ingest
+    depends_on:
+      - srs
+    restart: unless-stopped
+
+  # OBS pushes here. Owns host :1935 so contestants use portless rtmp://host/live.
+  # Verifies the publisher's website account, then relays to SRS (srs:1935).
+  rtmp-gateway:
+    build:
+      context: ../rtmp-gateway
+      dockerfile: Dockerfile
+    image: constrainable-rtmp-gateway:latest
+    container_name: ingest-rtmp-gateway
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      RTMP_LISTEN: ":1935"
+      SRS_ADDR: "srs:1935"
+      APP_BASE: "http://app:31954"
+      RTMP_AUTH_TOKEN: ${RTMP_AUTH_TOKEN:-change-me-to-a-long-random-string}
+    ports:
+      - "1935:1935"   # RTMP ingest (OBS) — the gateway is the public RTMP front-door
     networks:
       - ingest
     depends_on:
@@ -58,7 +94,8 @@ services:
       - ./srs.conf:/srs.conf.template:ro
       - ./srs-entrypoint.sh:/srs-entrypoint.sh:ro
     ports:
-      - "1935:1935"   # RTMP ingest (OBS)
+      # RTMP ingest is NOT published here — the rtmp-gateway fronts :1935 and
+      # relays to srs:1935 over the internal network.
       - "1985:1985"   # HTTP API + WHEP (browser)
       - "8080:8080"   # HTTP-FLV / HLS playback (browser)
       - "8000:8000/udp" # WebRTC (optional)

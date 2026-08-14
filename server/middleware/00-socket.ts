@@ -1,5 +1,5 @@
 /**
- * Socket.IO server, attached to the SAME HTTP server as the app (port 3000).
+ * Socket.IO server, attached to the SAME HTTP server as the app (port 31954).
  *
  * The node-server Nitro preset's entry (`.output/server/chunks/nitro/nitro.mjs`)
  * calls `server.listen()` directly and never emits the Nitro `listen` hook, so a

@@ -23,6 +23,12 @@ export interface EventView {
   status: EventStatus
   limitsOverride: Record<string, number | null> | null
   recordEnabled: boolean
+  /**
+   * When true, OBS publishers must authenticate with their website account
+   * (email + login password) via OBS' "Use authentication" fields. The Go RTMP
+   * gateway does the authmod challenge-response; SRS event auth is unchanged.
+   */
+  requireAccountAuth: boolean
   visibility: EventVisibility
   /** groups linked to this event (meaningful when visibility === 'groups'). */
   groups: EventGroupRef[]
@@ -45,6 +51,8 @@ export interface EventInput {
   status?: EventStatus
   limitsOverride?: Record<string, number | null> | null
   recordEnabled?: boolean
+  /** toggles OBS "Use authentication" enforcement (account auth via the gateway). */
+  requireAccountAuth?: boolean
   visibility?: EventVisibility
   /** admin-authored custom instructions shown on the participant guide. */
   streamGuide?: string | null
@@ -54,24 +62,28 @@ export interface EventInput {
 
 /**
  * Participant push-streaming guide for one event. Identical for every viewer of
- * the same event. The stream key the contestant pastes into OBS is
- * `${streamNameHint}?token=${publishKey}` — the publish key is shared by the
- * whole class; the stream NAME is each contestant's own account email (unique,
- * so concurrent publishing works with one shared key).
+ * the same event. The stream key the contestant pastes into OBS is the shared
+ * publish key ALONE — the RTMP gateway derives the stream name per publisher
+ * (their account email when authenticated, else the connection IP), so
+ * concurrent publishing works with one shared key and no per-user prefix.
  */
 export interface EventGuide {
   name: string
   slug: string
-  /** RTMP server URL the contestant enters in OBS (rtmp://host:1935/live). */
+  /** RTMP server URL the contestant enters in OBS (rtmp://host/live). */
   server: string
-  /** shared publish key (the ?token= value), or null if the organizer hasn't set one. */
+  /** shared publish key (pasted as the OBS stream key), or null if the organizer hasn't set one. */
   publishKey: string | null
-  /** what the contestant uses as the OBS stream NAME (their account email). */
-  streamNameHint: string
   /** recommended OBS output limits (global merged with the event override). */
   limits: Limits
   startsAt: number | null
   endsAt: number | null
+  /**
+   * When true, the guide instructs contestants to enable OBS'
+   * "Use authentication" and enter their account email + login password (the Go
+   * RTMP gateway verifies them); when false, only the shared publish key is used.
+   */
+  requireAccountAuth: boolean
   /** admin-authored custom instructions, or null. */
   streamGuide: string | null
 }

@@ -142,8 +142,8 @@ dist
 dist
 
 # Bun
-bun.lock
-bun.lockb
+# bun.lock
+# bun.lockb
 
 # App runtime data (SQLite db + recordings)
 data/
@@ -154,3 +154,4 @@ records/
 *.db-shm
 
 .mcp.json
+rtmp-gateway/rtmp-gateway

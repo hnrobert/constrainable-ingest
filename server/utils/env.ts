@@ -16,6 +16,11 @@ export const env = {
   /** JWT signing secret (HS256). Falls back to the legacy session secret. */
   jwtSecret: process.env.JWT_SECRET || process.env.SESSION_SECRET || 'dev-insecure-secret-change-me',
 
+  /** AES-256-GCM key for at-rest secrets (RTMP authmod verifier, etc.). */
+  verifierSecret: process.env.AUTHMOD_VERIFIER_SECRET || 'dev-insecure-secret-change-me',
+  /** Shared secret guarding internal RTMP-auth endpoints (app ↔ RTMP gateway). */
+  rtmpAuthToken: process.env.RTMP_AUTH_TOKEN || 'dev-insecure-rtmp-token',
+
   /** SRS HTTP API base (server-to-server) */
   srsApiBase: process.env.SRS_API_BASE || 'http://127.0.0.1:1985/api/v1',
   /** SRS RTMP host (server-to-server, for ffprobe/ffmpeg pull) */

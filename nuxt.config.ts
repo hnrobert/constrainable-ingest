@@ -19,7 +19,7 @@ export default defineNuxtConfig({
       // call back into the dev app during OBS ingest testing. To actually
       // receive that call the dev server must also bind off-loopback — run
       // `HOST=0.0.0.0 bun run dev`. Production (the `app` container) is
-      // unaffected (SRS reaches it on the compose bridge as `app:3000`).
+      // unaffected (SRS reaches it on the compose bridge as `app:31954`).
       allowedHosts: ['host.docker.internal'],
     },
   },
@@ -80,6 +80,8 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // server-only (overridable via NUXT_* env at runtime)
     sessionSecret: process.env.SESSION_SECRET || 'dev-insecure-secret-change-me',
+    verifierSecret: process.env.AUTHMOD_VERIFIER_SECRET || 'dev-insecure-secret-change-me',
+    rtmpAuthToken: process.env.RTMP_AUTH_TOKEN || 'dev-insecure-rtmp-token',
     dbPath: process.env.DB_PATH || './data/app.db',
     recordDir: process.env.RECORD_DIR || './records',
     srsApiBase: process.env.SRS_API_BASE || 'http://127.0.0.1:1985/api/v1',
