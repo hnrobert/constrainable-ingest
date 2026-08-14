@@ -1,10 +1,13 @@
 import { env } from './env'
 
-/** Port of check_server.py build_rtmp_url — the server-to-SRS pull address. */
+/**
+ * The server-to-SRS pull address (recorder ffmpeg, monitor ffprobe). Path
+ * components use encodeURI, NOT encodeURIComponent: `@` is legal in RTMP path
+ * segments and ffmpeg treats URLs literally — `gwtest%40example.com` pulls a
+ * nonexistent stream, so email stream names must stay verbatim.
+ */
 export function buildRtmpUrl(app: string, stream: string, vhost?: string): string {
-  const appQ = encodeURIComponent(app)
-  const streamQ = encodeURIComponent(stream)
-  let url = `rtmp://${env.srsRtmpHost}/${appQ}/${streamQ}`
+  let url = `rtmp://${env.srsRtmpHost}/${encodeURI(app)}/${encodeURI(stream)}`
   if (vhost && vhost !== '__defaultVhost__') {
     url += `?vhost=${encodeURIComponent(vhost)}`
   }
@@ -20,15 +23,21 @@ export interface PlaybackUrls {
 }
 
 /**
- * Browser→SRS playback URLs for a live stream, using the browser-visible host
- * (LAN/public IP). The browser connects to SRS directly — media never flows
- * through the app process.
+ * Playback URLs for a live stream.
+ *
+ * FLV: a RELATIVE same-origin URL — the app proxies SRS's HTTP-FLV remux at
+ * /api/streams/live/<stream> (see server/api/streams/live/[stream].get.ts), so
+ * playback needs no CORS and works from any machine that can reach the app,
+ * regardless of SRS's host/ports.
+ *
+ * WHEP (WebRTC): the browser must talk to SRS directly (media is peer-to-peer;
+ * only the SDP signaling could be proxied), so this stays an absolute URL on
+ * the browser-visible host.
  */
 export function buildPlaybackUrls(streamName: string): PlaybackUrls {
-  const streamQ = encodeURIComponent(streamName)
   return {
-    flv: `http://${env.publicHost}:${env.srsFlvPort}/${LIVE_APP}/${streamQ}.flv`,
-    whep: `http://${env.publicHost}:${env.srsApiPort}/rtc/v1/whep/?app=${LIVE_APP}&stream=${streamQ}`,
+    flv: `/api/streams/live/${encodeURIComponent(streamName)}`,
+    whep: `http://${env.publicHost}:${env.srsApiPort}/rtc/v1/whep/?app=${LIVE_APP}&stream=${encodeURIComponent(streamName)}`,
   }
 }
 

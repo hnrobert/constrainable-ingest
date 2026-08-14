@@ -37,6 +37,7 @@ services:
       RECORD_DIR: /app/records
       # SRS endpoints (server-to-server via compose service name, NOT host ports)
       SRS_API_BASE: http://srs:1985/api/v1
+      SRS_FLV_BASE: http://srs:8080
       SRS_RTMP_HOST: srs
       # browser-visible host (LAN/public IP) for playback URLs
       PUBLIC_HOST: ${PUBLIC_HOST:-127.0.0.1}

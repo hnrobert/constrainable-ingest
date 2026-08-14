@@ -23,6 +23,8 @@ export const env = {
 
   /** SRS HTTP API base (server-to-server) */
   srsApiBase: process.env.SRS_API_BASE || 'http://127.0.0.1:1985/api/v1',
+  /** SRS HTTP-FLV base (server-to-server, for the same-origin playback proxy) */
+  srsFlvBase: process.env.SRS_FLV_BASE || 'http://127.0.0.1:8080',
   /** SRS RTMP host (server-to-server, for ffprobe/ffmpeg pull) */
   srsRtmpHost: process.env.SRS_RTMP_HOST || '127.0.0.1',
   /** Browser-facing SRS ports (for viewer playback URLs) */
