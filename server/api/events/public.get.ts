@@ -29,6 +29,8 @@ export default defineEventHandler((): EventView[] => {
         visibility: e.visibility,
         groups: groupRows,
         publishTokenPreview: e.publishTokenPrefix ?? null,
+        publishKeyPreview: e.publishKey ? `${e.publishKey.slice(0, 4)}…` : null,
+        streamGuide: e.streamGuide ?? null,
         createdAt: e.createdAt.getTime(),
         updatedAt: e.updatedAt.getTime(),
       }

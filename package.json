@@ -13,10 +13,12 @@
     "typecheck": "nuxt typecheck",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "start": "bun .output/server/index.mjs"
+    "start": "bun .output/server/index.mjs",
+    "stress": "bun run scripts/stress-streams.ts"
   },
   "trustedDependencies": [],
   "dependencies": {
+    "@libsql/client": "^0.17.4",
     "@lucide/vue": "^1.31.0",
     "@noble/hashes": "^2.3.0",
     "@tailwindcss/vite": "^4",
@@ -25,6 +27,7 @@
     "clsx": "^2.1.1",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
+    "email-poster": "^0.3.3",
     "jose": "^6.2.8",
     "lucide-vue-next": "^1.0.0",
     "mpegts.js": "^1.8.1",

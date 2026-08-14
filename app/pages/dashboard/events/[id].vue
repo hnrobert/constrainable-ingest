@@ -74,6 +74,7 @@ onMounted(async () => {
   } catch {
     /* non-admin or transient — leave empty */
   }
+  loadPublishKey()
 })
 
 function sameSet(a: number[], b: number[]): boolean {
@@ -89,7 +90,8 @@ const settingsDirty = computed(() => {
     s.description !== e.description ||
     s.status !== e.status ||
     s.recordEnabled !== e.recordEnabled ||
-    s.visibility !== e.visibility
+    s.visibility !== e.visibility ||
+    s.streamGuide !== e.streamGuide
   return scalarChanged || !sameSet(selectedGroupIds.value, e.groups.map((g) => g.id))
 })
 
@@ -116,6 +118,7 @@ async function saveSettings(): Promise<boolean> {
         status: s.status,
         recordEnabled: s.recordEnabled,
         visibility: s.visibility,
+        streamGuide: s.streamGuide,
         groupIds: selectedGroupIds.value,
       },
     })
@@ -269,6 +272,83 @@ function clearPublishToken(): void {
     try {
       await $fetch(`/api/events/${id}/publish-token`, { method: 'DELETE' })
       freshPublishToken.value = null
+      await refreshEvent()
+      toast.info('Cleared')
+    } catch (e: any) {
+      toast.error('Clear failed: ' + (e?.data?.statusMessage || e?.message || ''))
+    }
+  }, { actionLabel: 'Clear' })
+}
+
+// ---- per-event publish key (admin) — the shared key on the participant guide ----
+// Unlike the publish token, the publish key is retrievable (stored verbatim), so
+// we display the current value and re-fetch it after any change rather than only
+// showing it once.
+const currentPublishKey = ref<string | null>(null)
+const rotatingKey = ref(false)
+const customKey = ref('')
+const customKeyValid = computed(() => {
+  const t = customKey.value.trim()
+  return t.length >= 8 && t.length <= 128 && TOKEN_RE.test(t)
+})
+async function loadPublishKey(): Promise<void> {
+  try {
+    const r = await $fetch<{ key: string | null }>(`/api/events/${id}/publish-key`)
+    currentPublishKey.value = r.key
+  } catch {
+    /* transient — leave as-is */
+  }
+}
+function generatePublishKey(): void {
+  const run = async (): Promise<void> => {
+    rotatingKey.value = true
+    try {
+      await $fetch(`/api/events/${id}/publish-key`, { method: 'POST' })
+      await Promise.all([loadPublishKey(), refreshEvent()])
+      if (event.value) settings.value = structuredClone(toRaw(event.value))
+      toast.success('Publish key generated')
+    } catch (e: any) {
+      toast.error('Generation failed: ' + (e?.data?.statusMessage || e?.message || ''))
+    } finally {
+      rotatingKey.value = false
+    }
+  }
+  if (currentPublishKey.value || event.value?.publishKeyPreview) {
+    confirm.ask('Generating a new key invalidates the old one immediately. Continue?', run, { actionLabel: 'Regenerate' })
+  } else {
+    run()
+  }
+}
+function setCustomPublishKey(): void {
+  if (!customKeyValid.value) return
+  const run = async (): Promise<void> => {
+    rotatingKey.value = true
+    try {
+      await $fetch(`/api/events/${id}/publish-key`, {
+        method: 'POST',
+        body: { key: customKey.value.trim() },
+      })
+      customKey.value = ''
+      await Promise.all([loadPublishKey(), refreshEvent()])
+      if (event.value) settings.value = structuredClone(toRaw(event.value))
+      toast.success('Custom publish key set')
+    } catch (e: any) {
+      toast.error('Set failed: ' + (e?.data?.statusMessage || e?.message || ''))
+    } finally {
+      rotatingKey.value = false
+    }
+  }
+  if (currentPublishKey.value || event.value?.publishKeyPreview) {
+    confirm.ask('Setting a custom key invalidates the old one immediately. Continue?', run, { actionLabel: 'Apply custom' })
+  } else {
+    run()
+  }
+}
+function clearPublishKey(): void {
+  confirm.ask('Clear the publish key? Publishes using this key will be rejected.', async () => {
+    try {
+      await $fetch(`/api/events/${id}/publish-key`, { method: 'DELETE' })
+      currentPublishKey.value = null
       await refreshEvent()
       toast.info('Cleared')
     } catch (e: any) {
@@ -459,6 +539,15 @@ const keyColumns: DataTableColumn[] = [
               <p v-if="!allGroups.length" class="text-xs text-muted-foreground">No groups exist yet — create some on the Groups page first.</p>
             </div>
           </div>
+          <div class="space-y-1.5 sm:col-span-2">
+            <Label>Participant guide instructions</Label>
+            <Textarea
+              :model-value="settings.streamGuide ?? ''"
+              @update:model-value="settings.streamGuide = String($event) || null"
+              rows="3"
+              placeholder="Optional notes shown on the participant guide (e.g. join 5 min early, use wired ethernet…)"
+            />
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -515,6 +604,63 @@ const keyColumns: DataTableColumn[] = [
         </div>
         <p v-if="customToken && !customTokenValid" class="text-xs text-destructive">
           Token must be 8–128 chars, containing only letters, digits, and <code class="font-mono">. _ - ~</code>.
+        </p>
+      </CardContent>
+    </Card>
+
+    <!-- per-event publish key (admin-only) — the shared key on the participant guide -->
+    <Card v-if="isAdmin">
+      <CardHeader>
+        <div class="flex items-center justify-between">
+          <CardTitle>Event publish key (participant guide)</CardTitle>
+          <Badge v-if="event.publishKeyPreview" variant="success">Set <code class="ml-1 font-mono text-xs">{{ event.publishKeyPreview }}…</code></Badge>
+          <Badge v-else variant="secondary">Not set</Badge>
+        </div>
+      </CardHeader>
+      <CardContent class="space-y-3">
+        <p class="text-xs text-muted-foreground">
+          One shared key per event, shown in full on the
+          <NuxtLink :to="`/e/${event.slug}`" target="_blank" class="underline hover:text-primary">participant guide</NuxtLink>.
+          Each contestant pastes it as <code class="font-mono">&lt;their-email&gt;?token=&lt;key&gt;</code> — the stream NAME
+          is their own account email (unique per person), so the whole class can stream at once. This is distinct from
+          the hashed publish token above.
+        </p>
+
+        <div v-if="currentPublishKey" class="space-y-1 rounded-md border border-ok/50 p-3 text-sm">
+          <strong>Publish key</strong>
+          <div class="flex flex-wrap items-center gap-2">
+            <code class="break-all font-mono text-xs">{{ currentPublishKey }}</code>
+            <Button variant="link" class="h-auto p-0 text-xs" @click="copy(currentPublishKey, 'Copied publish key')">Copy</Button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="min-w-20 text-xs text-muted-foreground">OBS server</span>
+            <code class="font-mono text-xs">{{ obs.server.value }}</code>
+            <Button variant="link" class="h-auto p-0 text-xs" @click="copy(obs.server.value, 'Copied server address')">Copy</Button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="min-w-20 text-xs text-muted-foreground">Stream key example</span>
+            <code class="font-mono text-xs">{{ obs.streamKey('account@example.com', currentPublishKey) }}</code>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3">
+          <Button v-if="event.publishKeyPreview || currentPublishKey" variant="outline" :disabled="rotatingKey" @click="clearPublishKey">Clear</Button>
+          <Button :disabled="rotatingKey" @click="generatePublishKey">
+            {{ rotatingKey ? 'Generating…' : event.publishKeyPreview || currentPublishKey ? 'Regenerate' : 'Generate random key' }}
+          </Button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <Input
+            v-model="customKey"
+            placeholder="Or custom key (8–128 chars, alphanumeric and . _ - ~)"
+            class="min-w-50 flex-1"
+            @keyup.enter="setCustomPublishKey"
+          />
+          <Button :disabled="rotatingKey || !customKeyValid" @click="setCustomPublishKey">Apply custom</Button>
+        </div>
+        <p v-if="customKey && !customKeyValid" class="text-xs text-destructive">
+          Key must be 8–128 chars, containing only letters, digits, and <code class="font-mono">. _ - ~</code>.
         </p>
       </CardContent>
     </Card>

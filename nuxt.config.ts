@@ -10,6 +10,9 @@ export default defineNuxtConfig({
   // Tailwind v4 (CSS-first) via the Vite plugin — NOT @nuxtjs/tailwindcss.
   vite: {
     plugins: [tailwindcss()],
+    // email-poster/vue ships .vue source; esbuild can't pre-bundle .vue, so
+    // exclude the package from dep optimization and let Vite compile it instead.
+    optimizeDeps: { exclude: ['email-poster'] },
     server: {
       // Vite's Host check 403s any caller that isn't localhost/127.0.0.1.
       // Allow `host.docker.internal` so a Dockerized SRS's on_publish hook can

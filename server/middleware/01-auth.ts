@@ -22,6 +22,9 @@ const ALLOW_PREFIX = [
   '/api/srs/',
   '/api/auth/',
   '/api/events/public',
+  // participant guide page + its visibility-gated data endpoint
+  '/e/',
+  '/api/events/slug/',
   '/api/health',
   '/_nuxt/',
   '/__nuxt',

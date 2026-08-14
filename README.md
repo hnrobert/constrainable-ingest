@@ -86,6 +86,26 @@ camera/LAN). With `docker compose up` running:
 8. **Retention** — set `retentionDays`; the next sweep deletes older recordings
    (audited).
 
+## Automated load / stress testing
+
+`scripts/stress-streams.ts` emulates many OBS clients from one machine (a looped
+clip pushed with `-c copy`, so each pusher uses ~zero CPU) and reports how many
+streams are actually publishing, app-side sessions/compliance, and the app
+container's CPU/memory. See **[docs/STREAMING.md](docs/STREAMING.md)** for the
+full ingest architecture, the harness flags, and the measured capacity.
+
+```bash
+docker compose -f docker/docker-compose.yml up -d --build   # stack must be running
+bun run stress --count 20 --hold 15                          # real auth path (argon2id)
+bun run stress --ramp 10,25,50,75,100 --mode open --hold 15  # raw ingest capacity
+```
+
+**Measured on a single machine (open mode):** clean linear scaling to
+**~100–150 concurrent streams**; ceiling ~200–250 where SRS's single CPU core
+saturates. Auth mode scales lower (~15–20 simultaneous *new* publishers) because
+each publish does a synchronous argon2id verify — see STREAMING.md for numbers,
+bottlenecks, and the SRS-API measurement gotchas.
+
 ## Layout
 
 ```bash
@@ -104,4 +124,9 @@ docker/       Dockerfile, docker-compose.yml, srs.conf, srs-entrypoint.sh
   Re-issuing a key for the same `(event, streamName)` rotates the token in place
   and clears any revoke.
 - `drizzle-kit push` runs at startup (auto-sync, no migration files) — schema is
-  the source of truth.
+  the source of truth. Under Bun this requires **`@libsql/client`** (installed in
+  the image); `better-sqlite3` is a NAPI addon that crashes Bun on linux/arm64.
+  `db.ts` verifies the schema synced at boot and refuses to start otherwise.
+- **Capacity & testing:** see **[docs/STREAMING.md](docs/STREAMING.md)** —
+  ingest architecture, the `scripts/stress-streams.ts` harness, measured
+  concurrent-stream limits, and the SRS-API measurement gotchas.

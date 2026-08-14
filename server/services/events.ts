@@ -28,6 +28,10 @@ export interface EventView {
   groups: EventGroupRef[]
   /** fingerprint (prefix) of the per-event publish token, or null if none set. */
   publishTokenPreview: string | null
+  /** fingerprint (prefix) of the shared publish key, or null if none set. */
+  publishKeyPreview: string | null
+  /** admin-authored custom instructions shown on the participant guide. */
+  streamGuide: string | null
   createdAt: number
   updatedAt: number
 }
@@ -42,6 +46,8 @@ export interface EventInput {
   limitsOverride?: LimitsOverride | null
   recordEnabled?: boolean
   visibility?: EventVisibility
+  /** admin-authored custom instructions shown on the participant guide. */
+  streamGuide?: string | null
   /** group ids to scope the event to (applied when visibility === 'groups'). */
   groupIds?: number[]
 }
@@ -61,6 +67,8 @@ function toView(e: Event): EventView {
     visibility: e.visibility,
     groups: groupRows.map((g) => ({ id: g.id, name: g.name })),
     publishTokenPreview: e.publishTokenPrefix ?? null,
+    publishKeyPreview: e.publishKey ? `${e.publishKey.slice(0, 4)}…` : null,
+    streamGuide: e.streamGuide ?? null,
     createdAt: e.createdAt.getTime(),
     updatedAt: e.updatedAt.getTime(),
   }
@@ -156,6 +164,7 @@ export function updateEvent(id: number, patch: EventInput): EventView {
     set.limitsOverride =
       patch.limitsOverride == null ? null : JSON.stringify(limitsOverrideSchema.parse(patch.limitsOverride))
   }
+  if (patch.streamGuide !== undefined) set.streamGuide = patch.streamGuide
 
   EventsRepository.update(id, set)
   if (patch.groupIds !== undefined) GroupsRepository.setEventGroups(id, patch.groupIds)
@@ -238,4 +247,60 @@ export function clearPublishToken(id: number): void {
     updatedAt: new Date(),
   })
   audit('warn', 'admin', `publish token cleared: ${existing.name}`, { eventId: id })
+}
+
+/**
+ * Set the shared per-event publish key. With `custom`, the caller-chosen string
+ * is validated and stored verbatim; without it a random one is generated. Unlike
+ * the publish token, this key is stored in plaintext so it can be redisplayed on
+ * the participant guide — it is a shared credential handed to everyone allowed
+ * to view the event, not a per-person secret. A publisher then pushes
+ * `${accountEmail}?token=${publishKey}`: the stream NAME is the contestant's
+ * account email (unique per person), so the whole class can stream concurrently
+ * with one shared key. Reuses the publish-token charset/length rules so the key
+ * round-trips cleanly through OBS → SRS → parseToken.
+ */
+export async function setPublishKey(
+  id: number,
+  custom?: string,
+): Promise<{ key: string; isCustom: boolean }> {
+  const existing = getRow(id)
+  let key: string
+  let isCustom = false
+  if (custom != null && custom.trim() !== '') {
+    const c = custom.trim()
+    if (c.length < PUBLISH_TOKEN_MIN || c.length > PUBLISH_TOKEN_MAX) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: `Key length must be ${PUBLISH_TOKEN_MIN}–${PUBLISH_TOKEN_MAX} characters`,
+      })
+    }
+    if (!PUBLISH_TOKEN_RE.test(c)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Key may only contain letters, digits, and . _ - ~',
+      })
+    }
+    key = c
+    isCustom = true
+  } else {
+    key = generateToken()
+  }
+  EventsRepository.update(id, { publishKey: key, updatedAt: new Date() })
+  audit('info', 'admin', `publish key ${isCustom ? 'set (custom)' : 'generated'}: ${existing.name}`, {
+    eventId: id,
+  })
+  return { key, isCustom }
+}
+
+/** Clear (unset) the shared per-event publish key. */
+export function clearPublishKey(id: number): void {
+  const existing = getRow(id)
+  EventsRepository.update(id, { publishKey: null, updatedAt: new Date() })
+  audit('warn', 'admin', `publish key cleared: ${existing.name}`, { eventId: id })
+}
+
+/** Full publish key (retrievable by design — used by the admin reveal + guide). */
+export function getPublishKey(id: number): string | null {
+  return getRow(id).publishKey ?? null
 }

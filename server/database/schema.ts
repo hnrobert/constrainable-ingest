@@ -57,12 +57,23 @@ export const events = sqliteTable(
     publishTokenHash: text('publish_token_hash'),
     /** first chars of the plaintext token — indexed for on_publish prefix lookup. */
     publishTokenPrefix: text('publish_token_prefix'),
+    /**
+     * Shared, retrievable event publish key shown on the participant guide and
+     * used as `?token=`. Stored verbatim (not hashed) so it can be redisplayed;
+     * it is a shared credential handed to everyone authorized to view the event,
+     * so it is not a per-person secret. The stream *name* (username) stays unique
+     * per contestant, so concurrent publishing still works with one shared key.
+     */
+    publishKey: text('publish_key'),
+    /** admin-authored custom instructions rendered atop the participant guide. */
+    streamGuide: text('stream_guide'),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(now),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(now),
   },
   (t) => [
     index('events_status_idx').on(t.status),
     index('events_publish_token_prefix_idx').on(t.publishTokenPrefix),
+    index('events_publish_key_idx').on(t.publishKey),
   ],
 )
 

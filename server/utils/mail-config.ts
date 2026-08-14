@@ -72,6 +72,8 @@ export function mailConfigToClient(c: MailConfig = getMailConfig()): MailConfigC
     maxLenBody: c.maxLenBody,
     postUrl: c.postUrl,
     postSchema: c.postSchema,
+    postFieldMap: c.postFieldMap,
+    postSchemas: c.postSchemas,
     hasPostAuthToken: c.postAuthToken.length > 0,
   }
 }

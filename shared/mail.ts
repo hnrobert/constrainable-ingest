@@ -5,9 +5,12 @@ import { z } from 'zod'
  * app_config, held by server/utils/mail-config.ts), super-admin-owned, editable
  * in the Mail settings page. Two providers:
  *   - 'smtp': Nodemailer direct SMTP (host/port/SSL/STARTTLS/auth).
- *   - 'post': HTTP POST webhook relaying to a downstream mailer, two payload
- *     schemas — 'smtogo' ({from,to,subject,html}) and 'powerautomate'
- *     ({email,content,subject}), for UNNC-style automation flows.
+ *   - 'post': HTTP POST webhook relaying to a downstream mailer. The payload
+ *     shape is a field map (logical field → downstream JSON key) edited by the
+ *     visual interface editor (`postFieldMap`, an email-poster FieldMap as JSON);
+ *     when empty it falls back to the legacy `postSchema` discriminator
+ *     ('powerautomate' → the Custom Example shape {email,content,subject},
+ *     otherwise smtogo's {from,to,subject,html}).
  *
  * `senderPassword` and `postAuthToken` are secrets: never returned by the GET
  * endpoint (mail-config.ts redacts them to '' + has* flags); a PUT with an empty
@@ -32,6 +35,22 @@ export const mailConfigSchema = z.object({
   postUrl: z.string().default(''),
   postSchema: z.enum(['smtogo', 'powerautomate']).default('smtogo'),
   postAuthToken: z.string().default(''),
+  /**
+   * email-poster FieldMap as JSON (logical field → downstream key), edited by the
+   * visual interface editor. When empty, the effective map is derived from
+   * `postSchema` for backward compatibility ('powerautomate' → the custom_example
+   * preset, otherwise smtogo). Once non-empty, this is authoritative.
+   */
+  postFieldMap: z.string().default(''),
+  /**
+   * The post-schemas library (email-poster `PostSchema[]`) as JSON — the named
+   * field maps the operator switches between / adds / renames / deletes in the
+   * editor. Stored server-side (shared across admins, not per-browser). The
+   * active webhook format is `postFieldMap`; this is the palette behind it.
+   * Empty string = never stored (the editor seeds the built-in defaults on first
+   * use and persists them here); `'[]'` = explicitly cleared (stays empty).
+   */
+  postSchemas: z.string().default(''),
 })
 
 export type MailConfig = z.infer<typeof mailConfigSchema>

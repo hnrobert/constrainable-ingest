@@ -2,20 +2,31 @@
     "cSpell.words": [
         "constrainable",
         "enrollment",
+        "envsubst",
         "ffprobe",
         "FOUC",
+        "gotchas",
+        "icpc",
         "incl",
+        "libsql",
         "lucide",
+        "mpegts",
+        "NAPI",
         "Nuxt",
         "onwarn",
+        "ossrs",
         "picomatch",
         "powerautomate",
         "reka",
         "remux",
+        "remuxes",
         "Rtmp",
+        "SESS",
         "smtogo",
         "STARTTLS",
         "textareas",
-        "vueuse"
+        "UNPUB",
+        "vueuse",
+        "WHEP"
     ]
 }

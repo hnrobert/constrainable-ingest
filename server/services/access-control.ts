@@ -7,9 +7,13 @@
  * Two credential kinds, both honoured, both time-window-gated:
  *   1. per-student stream key — looked up by streamName; the token verifies
  *      against stream_keys.token_hash. Resolves student attribution.
- *   2. per-event publish token — when no stream key matches, the token is
- *      checked against events.publish_token_hash (prefix-indexed). Lets an
- *      organizer hand the whole class one token valid only inside the window.
+ *   2. per-event shared credential — when no stream key matches, the token is
+ *      checked against events.publish_token_hash (prefix-indexed, argon2id) and,
+ *      failing that, against events.publish_key (plaintext, direct compare —
+ *      the retrievable key shown on the participant guide). Lets an organizer
+ *      hand the whole class one credential valid only inside the window; the
+ *      stream NAME (account email) stays unique per contestant, so the class can
+ *      stream concurrently with one shared key.
  *
  * A stream is only allowed while inside its event's [startsAt, endsAt] window
  * (each bound enforced only when set). No key/token at all: allowed only when
@@ -100,9 +104,15 @@ export async function authorizePublish(ctx: AuthContext): Promise<AuthResult> {
     }
   }
 
-  // Path 2 — per-event publish token (fallback when no student key matched).
+  // Path 2 — shared event credentials (fallback when no student key matched):
+  //   (a) the per-event publish token (argon2id-verified), or
+  //   (b) the per-event publish key (plaintext, direct compare — shown on the
+  //       participant guide). Either lets an organizer hand the whole class one
+  //       credential; the stream NAME stays unique per contestant (their account
+  //       email), so concurrent publishing still works with one shared key.
   if (token) {
-    const event = await findEventByPublishToken(token)
+    const event =
+      (await findEventByPublishToken(token)) ?? EventsRepository.findByPublishKey(token) ?? null
     if (event) {
       if (event.status === 'archived') return { allow: false, reason: 'event closed' }
       const windowReason = withinWindow(event)

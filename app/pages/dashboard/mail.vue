@@ -24,6 +24,7 @@ const form = reactive({
   senderDomain: '',
   postUrl: '',
   postSchema: 'smtogo',
+  postFieldMap: '',
 })
 const senderPassword = ref('')
 const postAuthToken = ref('')
@@ -48,6 +49,7 @@ function syncFromConfig(c: MailConfigClient): void {
   form.senderDomain = c.senderDomain ?? ''
   form.postUrl = c.postUrl ?? ''
   form.postSchema = c.postSchema ?? 'smtogo'
+  form.postFieldMap = c.postFieldMap ?? ''
   hasPassword.value = c.hasPassword ?? false
   hasPostAuthToken.value = c.hasPostAuthToken ?? false
 }
@@ -205,15 +207,6 @@ function discardAndLeave(): void {
         <CardContent class="space-y-3">
           <FieldRow label="Webhook URL">
             <Input v-model="form.postUrl" placeholder="https://..." />
-          </FieldRow>
-          <FieldRow label="Data format">
-            <Select v-model="form.postSchema">
-              <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="smtogo">smtogo ({ from, to, subject, html })</SelectItem>
-                <SelectItem value="powerautomate">Power Automate ({ email, content, subject })</SelectItem>
-              </SelectContent>
-            </Select>
           </FieldRow>
           <FieldRow label="Bearer Token (auth, optional)">
             <Input v-model="postAuthToken" type="password" autocomplete="new-password" placeholder="Leave blank to keep unchanged" />

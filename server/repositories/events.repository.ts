@@ -20,9 +20,17 @@ export const EventsRepository = {
       : db.select().from(events).where(eq(events.slug, slug))
     return q.get()
   },
+  /** Public participant guide resolves an event by its slug. */
+  findBySlug(slug: string): Event | undefined {
+    return db.select().from(events).where(eq(events.slug, slug)).get()
+  },
   /** on_publish hot path: candidate events whose publish-token prefix matches. */
   findByPublishTokenPrefix(prefix: string): Event[] {
     return db.select().from(events).where(eq(events.publishTokenPrefix, prefix)).all()
+  },
+  /** on_publish hot path: the single event whose shared publish key matches. */
+  findByPublishKey(key: string): Event | undefined {
+    return db.select().from(events).where(eq(events.publishKey, key)).get()
   },
   insert(values: NewEvent): Event {
     return db.insert(events).values(values).returning().get()
