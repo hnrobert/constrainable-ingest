@@ -45,7 +45,6 @@ func handleOBS(conn net.Conn, app *appClient) {
 	authed := false  // true only after a successful authmod verify (stage 3)
 	authedUser := "" // the email that was verified (must match the stream name)
 	var up *upstream
-	dbgN := 0    // TEMP DEBUG: log the first messages after publish
 	bytesIn := 0 // total payload bytes received from OBS (for acknowledgements)
 	lastAck := 0
 	for {
@@ -53,10 +52,6 @@ func handleOBS(conn net.Conn, app *appClient) {
 		if err != nil {
 			log.Printf("%s read end: %v", remote, err)
 			break
-		}
-		if dbgN < 60 {
-			dbgN++
-			log.Printf("%s [dbg %d] msg type=%d csid=%d msid=%d ts=%d len=%d", remote, dbgN, msg.Type, msg.CSID, msg.StreamID, msg.Timestamp, len(msg.Payload))
 		}
 
 		// RTMP flow control: ack every advertised window (2.5MB). Without this,
@@ -228,7 +223,6 @@ func handleOBS(conn net.Conn, app *appClient) {
 					log.Printf("%s upstream gone — closing OBS connection", remote)
 					conn.Close()
 				}()
-				dbgN = 0 // TEMP DEBUG: reset counters to capture post-publish frames
 				// StreamBegin(msid 1) — standard server signal that accompanies
 				// Publish.Start.
 				_ = cw.WriteMessage(&Message{Type: 4, CSID: 2, Payload: append([]byte{0, 0}, putBe4(1)...)})

@@ -1,16 +1,18 @@
 # Single-machine intranet deployment: app + RTMP gateway + SRS, no TLS.
 #
-# Network model:
-#   - The three containers talk to each other over an ISOLATED bridge network
-#     (`ingest`) using compose service names + container ports — never the host
-#     ports/localhost. rtmp-gateway → http://app:31954/api/srs/rtmp-auth/* (auth)
-#     and rtmp://srs:1935 (relay); app → http://srs:1985 (API) + rtmp://srs/...
-#     (pull); srs → http://app:31954/api/srs/* (http_hooks).
-#   - Host ports below are published ONLY for things that live OUTSIDE the
-#     containers: the browser (app :31954, which also serves Socket.IO at
-#     /socket.io/, and SRS FLV :8080 / WHEP :1985) and OBS (RTMP :1935, served by
-#     the gateway). PUBLIC_HOST is the browser-visible host IP for playback URLs —
-#     it is NOT used for inter-container traffic.
+# Network model — everything possible stays on the isolated `ingest` bridge and
+# is reached by compose service name + container port:
+#   rtmp-gateway → http://app:31954/api/srs/rtmp-auth/* (auth) + rtmp://srs:1935
+#   (relay); app → http://srs:1985/api/v1 (API) + http://srs:8080 (same-origin
+#   FLV playback proxy) + rtmp://srs:1935 (recorder/monitor pull); srs →
+#   http://app:31954/api/srs/* (http_hooks).
+#
+# Only TWO host ports are published — the ones clients outside the network need:
+#   :31954  app          — browsers (SSR + API + Socket.IO + FLV playback proxy)
+#   :1935   rtmp-gateway — OBS RTMP ingest
+# SRS publishes NOTHING: browsers watch via the app's same-origin proxy, and all
+# server-side traffic rides the docker network. (For optional direct WebRTC/WHEP
+# playback, see the commented ports under `srs`.)
 #
 # RTMP ingress: the `rtmp-gateway` owns host :1935 and is OBS' front-door, on a
 # SINGLE URL (rtmp://host/live) for all events. It challenges every publisher
@@ -89,17 +91,18 @@ services:
     entrypoint: ["/bin/sh", "/srs-entrypoint.sh"]
     environment:
       TZ: ${TZ:-Asia/Shanghai}
-      # browser-reachable IP for WebRTC ICE candidate (the host's LAN/public IP)
+      # browser-reachable IP for WebRTC ICE candidate (the host's LAN/public IP);
+      # only relevant if the optional WebRTC ports below are published
       SRS_RTC_CANDIDATE: ${PUBLIC_HOST:-127.0.0.1}
     volumes:
       - ./srs.conf:/srs.conf.template:ro
       - ./srs-entrypoint.sh:/srs-entrypoint.sh:ro
-    ports:
-      # RTMP ingest is NOT published here — the rtmp-gateway fronts :1935 and
-      # relays to srs:1935 over the internal network.
-      - "1985:1985"   # HTTP API + WHEP (browser)
-      - "8080:8080"   # HTTP-FLV / HLS playback (browser)
-      - "8000:8000/udp" # WebRTC (optional)
+    # NOTHING is published by default — browsers watch through the app's
+    # same-origin FLV proxy, and all server traffic rides the `ingest` network.
+    # Optional: direct WebRTC (WHEP) playback from browsers needs these two:
+    # ports:
+    #   - "1985:1985"      # WHEP signaling (browser → SRS)
+    #   - "8000:8000/udp"  # WebRTC media
     networks:
       - ingest
     restart: unless-stopped

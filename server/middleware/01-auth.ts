@@ -26,6 +26,9 @@ const ALLOW_PREFIX = [
   '/e/',
   '/api/events/slug/',
   '/api/health',
+  // client crash reporter (must be reachable even when the app is broken)
+  '/api/client-errors',
+  '/favicon.svg',
   '/_nuxt/',
   '/__nuxt',
   '/socket/',

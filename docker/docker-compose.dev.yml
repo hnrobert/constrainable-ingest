@@ -18,5 +18,6 @@ services:
     ports: !override
       - "11935:1935"   # SRS RTMP, remapped off 1935 so the dev gateway can own :1935
       - "1985:1985"   # HTTP API + WHEP
-      - "8080:8080"   # HTTP-FLV / HLS
+      - "18080:8080"   # HTTP-FLV, remapped off 8080 (the host's :8080 is commonly
+                       # taken by other dev projects, which silently breaks SRS_FLV_BASE)
       - "8000:8000/udp" # WebRTC

@@ -107,6 +107,7 @@ export default defineNuxtConfig({
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       ],
+      link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
       // Apply the persisted theme BEFORE paint to avoid a flash of the wrong
       // theme. useColorMode (storageKey 'ci.theme') mirrors this client-side;
       // stored value is 'auto' | 'light' | 'dark'.

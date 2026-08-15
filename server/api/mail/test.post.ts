@@ -8,6 +8,8 @@ import { EMAIL_RE, normalizeEmail } from '../../utils/registration'
 import { checkEmailSend, throwEmailLimit } from '../../utils/email-limit'
 import { getMailConfig, isMailConfigured } from '../../utils/mail-config'
 import { sendMailWithConfig } from '../../services/mail'
+import { renderCardEmail } from 'email-poster/template'
+import { ingestMailTheme } from '../../utils/mail-template'
 import { audit } from '../../services/audit'
 
 export default defineEventHandler(async (event) => {
@@ -29,7 +31,15 @@ export default defineEventHandler(async (event) => {
     await sendMailWithConfig(getMailConfig(), {
       to,
       subject: '[Constrainable Ingest]Test email',
-      body: '<p>This is a test email from Constrainable Ingest. If you received it, your mail configuration is working correctly.</p>',
+      body: renderCardEmail(
+        {
+          title: 'Test email',
+          bodyHtml:
+            '<p>This is a test email from Constrainable Ingest. If you received it, your mail configuration is working correctly.</p>',
+          preheader: 'Constrainable Ingest test email',
+        },
+        ingestMailTheme(),
+      ),
       html: true,
     })
   } catch (err) {

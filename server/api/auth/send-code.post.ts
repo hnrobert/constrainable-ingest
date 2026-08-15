@@ -19,7 +19,8 @@ import { issueCode } from '../../utils/email-code'
 import { checkEmailSend, throwEmailLimit } from '../../utils/email-limit'
 import { getMailConfig, isMailConfigured } from '../../utils/mail-config'
 import { sendMailWithConfig } from '../../services/mail'
-import { renderVerificationEmail, VERIFICATION_CODE_SUBJECT } from '../../utils/mail-template'
+import { renderCodeEmail } from 'email-poster/template'
+import { ingestMailTheme, VERIFICATION_CODE_SUBJECT } from '../../utils/mail-template'
 import { audit } from '../../services/audit'
 
 const CODE_MINUTES = 10
@@ -78,10 +79,20 @@ export default defineEventHandler(async (event) => {
   issueCode(email, session, code)
 
   try {
+    const F = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"
     await sendMailWithConfig(getMailConfig(), {
       to: email,
       subject: VERIFICATION_CODE_SUBJECT,
-      body: renderVerificationEmail(code, CODE_MINUTES),
+      body: renderCodeEmail(
+        {
+          code,
+          title: 'Registration verification code',
+          leadHtml: `<p style="${F}font-size:15px;line-height:1.65;color:#404040;">You are registering an account. Please use the verification code below to complete verification:</p>`,
+          hintHtml: `<p style="${F}font-size:13px;line-height:1.6;color:#737373;">The code is valid for ${CODE_MINUTES} minutes. If this wasn't you, please ignore this email.</p>`,
+          preheader: `Your registration verification code is ${code}`,
+        },
+        ingestMailTheme(),
+      ),
       html: true,
     })
   } catch (err) {

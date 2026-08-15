@@ -35,13 +35,16 @@ echo "SESSION_SECRET=$(openssl rand -hex 32)" >> .env
 docker compose up -d --build
 ```
 
+From the repo root, the lifecycle shortcuts are: `bun run compose:up` (full stack, `-d --force-recreate --build`), `bun run compose:down`, `bun run compose:logs` (tail all service logs; `compose:logs:srs` for SRS only), and `bun run compose:up:dev` for the hybrid dev topology (host-run app + RTMP gateway, SRS in Docker remapped to :11935).
+
+Only two host ports are published; everything else rides the internal `ingest` docker network (SRS publishes nothing — browsers watch through the app's same-origin FLV proxy, server-side pulls use `http://srs:8080` / `http://srs:1985` directly):
+
 | Port | Service | Purpose |
 | --- | --- | --- |
-| 31954 | app | admin panel + API (SSR) + Socket.IO (same origin) |
-| 1935 | srs | RTMP ingest (OBS target) |
-| 8080 | srs | HTTP-FLV playback (browser → SRS) |
-| 1985 | srs | HTTP API + WHEP |
-| 8000/udp | srs | WebRTC (optional) |
+| 31954 | app | admin panel + API (SSR) + Socket.IO + same-origin FLV playback proxy |
+| 1935 | rtmp-gateway | RTMP ingest (OBS target; account auth + relay to SRS) |
+
+Optional: direct WebRTC (WHEP) playback from browsers requires publishing SRS's `1985` (signaling) and `8000/udp` (media) — see the commented block in `docker/docker-compose.yml`.
 
 `docker/srs-entrypoint.sh` substitutes the WebRTC `candidate` from `PUBLIC_HOST` into `srs.conf` at startup (the stock ossrs image won't envsubst a mounted config). http_hooks point at the compose hostname `app:31954`.
 
