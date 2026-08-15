@@ -88,14 +88,6 @@ function getRow(id: number): Event {
   return row
 }
 
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9-_]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
-
 function toTs(ms: number | null | undefined): Date | null {
   if (ms == null) return null
   const d = new Date(ms)
@@ -116,11 +108,27 @@ export function getEvent(id: number): EventView {
   return toView(getRow(id))
 }
 
+/**
+ * The event key (stored as `slug`): unique, lowercased `[a-z0-9_-]+`. It is the
+ * guide URL path AND the OBS stream key — the strict charset makes it
+ * URL-safe and OBS→gateway→SRS round-trip-safe with no further validation.
+ */
+const EVENT_KEY_RE = /^[a-z0-9_-]+$/
+
+function validEventKey(slug: string): string {
+  if (!EVENT_KEY_RE.test(slug)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Event key may only contain lowercase letters, digits, _ and -',
+    })
+  }
+  return slug
+}
+
 export function createEvent(input: EventInput): EventView {
   const name = (input.name ?? '').trim()
   if (!name) throw createError({ statusCode: 400, statusMessage: 'name is required' })
-  const slug = slugify(input.slug ?? name)
-  if (!slug) throw createError({ statusCode: 400, statusMessage: 'could not derive a valid slug' })
+  const slug = validEventKey((input.slug ?? '').trim())
   ensureSlugUnique(slug)
 
   const limitsOverride =
@@ -129,6 +137,8 @@ export function createEvent(input: EventInput): EventView {
   const row = EventsRepository.insert({
     name,
     slug,
+    // the event key IS the stream key (retrievable by design — shown on the guide)
+    publishKey: slug,
     description: input.description ?? null,
     startsAt: toTs(input.startsAt),
     endsAt: toTs(input.endsAt),
@@ -157,10 +167,13 @@ export function updateEvent(id: number, patch: EventInput): EventView {
     set.name = name
   }
   if (patch.slug != null) {
-    const slug = slugify(patch.slug)
-    if (!slug) throw createError({ statusCode: 400, statusMessage: 'invalid slug' })
-    if (slug !== existing.slug) ensureSlugUnique(slug, id)
-    set.slug = slug
+    const slug = validEventKey(patch.slug.trim())
+    if (slug !== existing.slug) {
+      ensureSlugUnique(slug, id)
+      set.slug = slug
+      // the event key IS the stream key — keep the publish key in lockstep
+      set.publishKey = slug
+    }
   }
   if (patch.description !== undefined) set.description = patch.description
   if (patch.startsAt !== undefined) set.startsAt = toTs(patch.startsAt)

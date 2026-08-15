@@ -97,6 +97,10 @@ type policyResult struct {
 	// RequireAccountAuth: the publish-key's event requires account auth — a
 	// connection that skipped the authmod dance may not publish it.
 	RequireAccountAuth bool `json:"requireAccountAuth"`
+	// WindowOpen: the event is inside its scheduled window. When closed, the
+	// gateway rejects the publish with NetStream.Publish.BadName, which OBS
+	// treats as a terminal invalid-stream (it stops instead of retry-looping).
+	WindowOpen bool `json:"windowOpen"`
 }
 
 // policy asks the app how to treat a publish token. Called at PUBLISH time —

@@ -28,21 +28,28 @@ const statusLabel: Record<EventStatus, string> = {
 
 const columns: DataTableColumn[] = [
   { key: 'name', header: 'Name', class: 'font-medium' },
-  { key: 'slug', header: 'slug', class: 'text-muted-foreground' },
+  { key: 'slug', header: 'Event key', class: 'font-mono text-muted-foreground' },
   { key: 'status', header: 'Status' },
   { key: 'actions', header: '', headClass: 'w-0' },
 ]
+
+/** Event key charset: lowercase letters, digits, underscore, hyphen — nothing else. */
+const EVENT_KEY_RE = /^[a-z0-9_-]+$/
 
 async function create(): Promise<void> {
   if (!form.name.trim()) {
     toast.error('Please fill in the event name')
     return
   }
+  if (!form.slug.trim() || !EVENT_KEY_RE.test(form.slug.trim())) {
+    toast.error('Event key is required (lowercase letters, digits, _ and - only)')
+    return
+  }
   saving.value = true
   try {
     await $fetch('/api/events', {
       method: 'POST',
-      body: { name: form.name, slug: form.slug || undefined, description: form.description || undefined },
+      body: { name: form.name, slug: form.slug.trim(), description: form.description || undefined },
     })
     toast.success('Event created')
     form.name = ''
@@ -79,8 +86,11 @@ async function create(): Promise<void> {
             <Input v-model="form.name" placeholder="e.g. 2026 Regional" />
           </div>
           <div class="space-y-1.5">
-            <Label>slug (auto-generated if blank)</Label>
+            <Label>Event key *</Label>
             <Input v-model="form.slug" placeholder="e.g. regional-2026" />
+            <p class="text-xs text-muted-foreground">
+              Lowercase letters, digits, <code>_</code> and <code>-</code> only. Doubles as the guide URL and the OBS stream key.
+            </p>
           </div>
           <div class="space-y-1.5 col-span-full">
             <Label>Description</Label>

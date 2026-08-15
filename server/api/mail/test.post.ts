@@ -5,7 +5,7 @@
  */
 import { createError } from 'h3'
 import { EMAIL_RE, normalizeEmail } from '../../utils/registration'
-import { checkEmailSend, throwEmailLimit } from '../../utils/email-limit'
+import { checkAccountSend, checkEmailSend, throwEmailLimit } from '../../utils/email-limit'
 import { getMailConfig, isMailConfigured } from '../../utils/mail-config'
 import { sendMailWithConfig } from '../../services/mail'
 import { renderCardEmail } from 'email-poster/template'
@@ -13,13 +13,16 @@ import { ingestMailTheme } from '../../utils/mail-template'
 import { audit } from '../../services/audit'
 
 export default defineEventHandler(async (event) => {
-  requireAdmin(event)
+  const admin = requireAdmin(event)
   const body = await readBody(event)
   const to = normalizeEmail(String(body?.to ?? ''))
   if (!EMAIL_RE.test(to)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid recipient email format' })
   }
 
+  // Rate limits: per sender (aggregated across their sends) and per recipient.
+  const accountLimit = checkAccountSend(admin.userId)
+  if (!accountLimit.allowed) throwEmailLimit(accountLimit)
   const limit = checkEmailSend('test', to)
   if (!limit.allowed) throwEmailLimit(limit)
 

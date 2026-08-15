@@ -260,8 +260,8 @@ func danceWrongPassword(t *testing.T, addr, user, wrongPassword, salt string) st
 }
 
 // mockAppMux exposes the gateway's app contract: salt + verify (one known user)
-// and policy. authKey is a publish key whose event requires account auth;
-// openKey is a publish key without it; anything else is an unknown token.
+// and policy. authKey requires account auth; openKey doesn't; closedKey's event
+// window is shut; anything else is an unknown token.
 func mockAppMux(token, authKey, openKey, user, salt, salted2 string) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/srs/rtmp-auth/salt", func(w http.ResponseWriter, r *http.Request) {
@@ -293,9 +293,11 @@ func mockAppMux(token, authKey, openKey, user, salt, salted2 string) *http.Serve
 			return
 		}
 		tok := r.URL.Query().Get("token")
-		isKey := (tok == authKey && authKey != "") || (tok == openKey && openKey != "")
+		const closedKey = "closedkey1" // publish key whose event window is shut
+		isKey := (tok == authKey && authKey != "") || (tok == openKey && openKey != "") || tok == closedKey
 		require := isKey && tok == authKey
-		_, _ = io.WriteString(w, `{"publishKey":`+b2s(isKey)+`,"requireAccountAuth":`+b2s(require)+`}`)
+		open := tok != closedKey
+		_, _ = io.WriteString(w, `{"publishKey":`+b2s(isKey)+`,"requireAccountAuth":`+b2s(require)+`,"windowOpen":`+b2s(open)+`}`)
 	})
 	return mux
 }
@@ -424,12 +426,13 @@ func expectName(t *testing.T, ch <-chan string, want string) {
 // the OBS stream key is the publish key ALONE (no email prefix).
 func TestPublishPolicyEnforcement(t *testing.T) {
 	const (
-		token    = "test-token"
-		authKey  = "authkey123"
-		openKey  = "openkey123"
-		password = "123456"
-		salt     = "deadbeefsalt"
-		user     = "robert@example.com"
+		token     = "test-token"
+		authKey   = "authkey123"
+		openKey   = "openkey123"
+		closedKey = "closedkey1"
+		password  = "123456"
+		salt      = "deadbeefsalt"
+		user      = "robert@example.com"
 	)
 	salted2 := b64(md5raw(user + salt + password))
 	app := httptest.NewServer(mockAppMux(token, authKey, openKey, user, salt, salted2))
@@ -449,6 +452,17 @@ func TestPublishPolicyEnforcement(t *testing.T) {
 		t.Fatalf("auth key, credless conn: expected BadName rejection, got %q", got)
 	}
 	c.Close()
+
+	// 1c) window-closed key (even AUTHED) → BadName "window closed" — OBS stops
+	// instead of retry-looping
+	c, cw, cr = danceAuth(t, addr, user, password)
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish("closedkey1")})
+	if got := cmdField(cr); !strings.Contains(got, "streaming window is closed") {
+		c.Close()
+		t.Fatalf("closed-window key: expected window-closed BadName, got %q", got)
+	}
+	c.Close()
+	_ = cr
 
 	// 1b) WRONG-password dance (gracefully accepted, unauthed) + auth key →
 	// still rejected at publish — the policy is the enforcement point

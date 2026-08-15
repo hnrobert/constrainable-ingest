@@ -76,7 +76,7 @@ export async function handlePublish(
   const auth = await authorizePublish({ stream: ctx.stream, param: ctx.param })
   if (!auth.allow) {
     const now = new Date()
-    const row = PublishSessionsRepository.insert({
+    PublishSessionsRepository.insert({
       eventId: ctx.eventId ?? null,
       streamKeyId: ctx.streamKeyId ?? null,
       streamName: ctx.stream,
@@ -86,22 +86,9 @@ export async function handlePublish(
       startedAt: now,
       endedAt: now,
     })
-    emit(
-      'session:start',
-      snapshot(
-        {
-          sessionId: row.id,
-          eventId: ctx.eventId ?? null,
-          streamName: ctx.stream,
-          app: ctx.app,
-          vhost: ctx.vhost,
-          clientId: ctx.clientId,
-          startedAtMs: now.getTime(),
-          active: false,
-        },
-        { width: null, height: null, fps: null, bitrateKbps: null, status: 'rejected', compliant: false },
-      ),
-    )
+    // No session:start broadcast: rejected publishers (bad key, closed window…)
+    // never belong on the LIVE panel — a retrying OBS would flood it with rows.
+    // The rejection stays queryable in the audit log and sessions history.
     audit('warn', 'access', `publish rejected: ${ctx.stream} (${auth.reason})`, {
       streamName: ctx.stream,
       detail: { reason: auth.reason, clientId: ctx.clientId },

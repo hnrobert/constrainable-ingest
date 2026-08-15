@@ -5,6 +5,30 @@ import type { DataTableColumn } from '~/components/DataTable.vue'
 const props = defineProps<{ sessions: SessionSnapshot[] }>()
 const emit = defineEmits<{ watch: [streamName: string] }>()
 
+const toast = useToast()
+const confirm = useConfirm()
+
+/** Sessions that still have a live publisher and can be kicked. */
+function kickable(s: SessionSnapshot): boolean {
+  return ['pending', 'allowed', 'compliant', 'violating'].includes(s.status) && !!s.srsClientId
+}
+
+function kick(s: SessionSnapshot): void {
+  confirm.ask(
+    `Kick ${s.streamName}? The publisher will be disconnected immediately (their recording is kept).`,
+    async () => {
+      try {
+        await $fetch(`/api/streams/clients/${encodeURIComponent(s.srsClientId!)}`, { method: 'DELETE' })
+        toast.success(`Kicked ${s.streamName}`)
+        // the row disappears on its own via the session:stop socket event
+      } catch (e: any) {
+        toast.error('Kick failed: ' + (e?.data?.statusMessage || e?.message || ''))
+      }
+    },
+    { actionLabel: 'Kick' },
+  )
+}
+
 const statusVariant: Record<SessionStatus, 'secondary' | 'warning' | 'success' | 'destructive'> = {
   pending: 'secondary',
   allowed: 'warning',
@@ -63,7 +87,17 @@ const columns: DataTableColumn[] = [
     </template>
     <template #cell-startedAt="{ row }">{{ fmtTime(row.startedAt) }}</template>
     <template #cell-actions="{ row }">
-      <Button size="sm" variant="outline" @click="emit('watch', row.streamName)">Watch</Button>
+      <div class="flex justify-end gap-1.5">
+        <Button size="sm" variant="outline" @click="emit('watch', row.streamName)">Watch</Button>
+        <Button v-if="kickable(row)" size="sm" variant="destructive" @click="kick(row)">Kick</Button>
+      </div>
     </template>
   </DataTable>
+  <ConfirmDialog
+    v-model:open="confirm.state.open"
+    :message="confirm.state.message"
+    :action-label="confirm.state.actionLabel"
+    :destructive="confirm.state.destructive"
+    @accept="confirm.accept"
+  />
 </template>

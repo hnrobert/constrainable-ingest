@@ -11,41 +11,22 @@ interface RosterEntry {
   seatLabel: string | null
   hasKey: boolean
 }
-interface KeyView {
-  id: number
-  streamName: string
-  tokenPreview: string
-  revoked: boolean
-  lastUsedAt: number | null
-  studentNumber: string | null
-  studentLabel: string | null
-}
-interface GeneratedKey {
-  id: number
-  streamName: string
-  token: string
-  tokenPreview: string
-  studentLabel: string
-  studentNumber: string
-}
 
 const route = useRoute()
 const id = Number(route.params.id)
 const toast = useToast()
 const confirm = useConfirm()
-const obs = useObsConfig()
 const { user } = useAuth()
 const isAdmin = computed(() => user.value?.role === 'admin')
 
 // Sync fetch (NO top-level await) so this page doesn't drag the dashboard
 // layout into an async Suspense boundary (client hydration mismatch). Nuxt
 // still awaits the registered useFetch promises during SSR and serializes the
-// results; the template reads event/roster/keys directly (populated on SSR for
+// results; the template reads event/roster directly (populated on SSR for
 // direct reads), and the watchEffect below (flush:'sync') populates the editable
 // `settings` copy at the instant `event` is assigned, before the render pass.
 const { data: event, refresh: refreshEvent } = useFetch<EventView>(`/api/events/${id}`)
 const { data: roster, refresh: refreshRoster } = useFetch<RosterEntry[]>(`/api/events/${id}/roster`)
-const { data: keys, refresh: refreshKeys } = useFetch<KeyView[]>(`/api/events/${id}/keys`)
 
 // ---- settings (admin-only) ----
 const settings = ref<EventView | null>(null)
@@ -74,7 +55,6 @@ onMounted(async () => {
   } catch {
     /* non-admin or transient — leave empty */
   }
-  loadPublishKey()
 })
 
 function sameSet(a: number[], b: number[]): boolean {
@@ -104,8 +84,15 @@ const visibilityLabel: Record<EventVisibility, string> = {
 
 const saving = ref(false)
 const saved = ref(false)
+/** Event key charset: lowercase letters, digits, underscore, hyphen — nothing else. */
+const EVENT_KEY_RE = /^[a-z0-9_-]+$/
+const eventKeyValid = computed(() => EVENT_KEY_RE.test(settings.value?.slug ?? ''))
 async function saveSettings(): Promise<boolean> {
   if (!settings.value) return false
+  if (!eventKeyValid.value) {
+    toast.error('Event key may only contain lowercase letters, digits, _ and -')
+    return false
+  }
   saving.value = true
   saved.value = false
   try {
@@ -195,10 +182,10 @@ async function importRoster(): Promise<void> {
   }
 }
 function removeEntry(enrollmentId: number): void {
-  confirm.ask('Remove this student from the roster? (Their stream key will be revoked)', async () => {
+  confirm.ask('Remove this student from the roster?', async () => {
     try {
       await $fetch(`/api/events/${id}/roster/${enrollmentId}`, { method: 'DELETE' })
-      await Promise.all([refreshRoster(), refreshKeys()])
+      await refreshRoster()
       toast.info('Removed')
     } catch (e: any) {
       toast.error('Remove failed: ' + (e?.data?.statusMessage || e?.message || ''))
@@ -206,206 +193,6 @@ function removeEntry(enrollmentId: number): void {
   }, { actionLabel: 'Remove' })
 }
 
-// ---- keys (admin) ----
-const freshKeys = ref<GeneratedKey[]>([])
-const genForm = reactive({ studentNumber: '', name: '', email: '', seatLabel: '', streamName: '' })
-
-// ---- per-event publish token (admin) ----
-const freshPublishToken = ref<{ token: string; preview: string; isCustom: boolean } | null>(null)
-const rotatingToken = ref(false)
-const customToken = ref('')
-const TOKEN_RE = /^[A-Za-z0-9._~-]+$/
-const customTokenValid = computed(() => {
-  const t = customToken.value.trim()
-  return t.length >= 8 && t.length <= 128 && TOKEN_RE.test(t)
-})
-function rotatePublishToken(): void {
-  const run = async (): Promise<void> => {
-    rotatingToken.value = true
-    try {
-      const r = await $fetch<{ token: string; preview: string; isCustom: boolean }>(
-        `/api/events/${id}/publish-token`,
-        { method: 'POST' },
-      )
-      freshPublishToken.value = r
-      await refreshEvent()
-      if (event.value) settings.value = structuredClone(toRaw(event.value))
-      toast.success('Publish token generated (copy it now, shown only once)')
-    } catch (e: any) {
-      toast.error('Generation failed: ' + (e?.data?.statusMessage || e?.message || ''))
-    } finally {
-      rotatingToken.value = false
-    }
-  }
-  if (event.value?.publishTokenPreview) {
-    confirm.ask('Regenerating will invalidate the old publish token immediately. Continue?', run, { actionLabel: 'Regenerate' })
-  } else {
-    run()
-  }
-}
-function setCustomPublishToken(): void {
-  if (!customTokenValid.value) return
-  const run = async (): Promise<void> => {
-    rotatingToken.value = true
-    try {
-      const r = await $fetch<{ token: string; preview: string; isCustom: boolean }>(
-        `/api/events/${id}/publish-token`,
-        { method: 'POST', body: { token: customToken.value.trim() } },
-      )
-      freshPublishToken.value = r
-      customToken.value = ''
-      await refreshEvent()
-      if (event.value) settings.value = structuredClone(toRaw(event.value))
-      toast.success('Custom publish token set')
-    } catch (e: any) {
-      toast.error('Set failed: ' + (e?.data?.statusMessage || e?.message || ''))
-    } finally {
-      rotatingToken.value = false
-    }
-  }
-  if (event.value?.publishTokenPreview) {
-    confirm.ask('Setting a custom token will invalidate the old publish token immediately. Continue?', run, { actionLabel: 'Apply custom' })
-  } else {
-    run()
-  }
-}
-function clearPublishToken(): void {
-  confirm.ask('Clear publish token? Publishes using this token will be rejected.', async () => {
-    try {
-      await $fetch(`/api/events/${id}/publish-token`, { method: 'DELETE' })
-      freshPublishToken.value = null
-      await refreshEvent()
-      toast.info('Cleared')
-    } catch (e: any) {
-      toast.error('Clear failed: ' + (e?.data?.statusMessage || e?.message || ''))
-    }
-  }, { actionLabel: 'Clear' })
-}
-
-// ---- per-event publish key (admin) — the shared key on the participant guide ----
-// Unlike the publish token, the publish key is retrievable (stored verbatim), so
-// we display the current value and re-fetch it after any change rather than only
-// showing it once.
-const currentPublishKey = ref<string | null>(null)
-const rotatingKey = ref(false)
-const customKey = ref('')
-const customKeyValid = computed(() => {
-  const t = customKey.value.trim()
-  return t.length >= 8 && t.length <= 128 && TOKEN_RE.test(t)
-})
-async function loadPublishKey(): Promise<void> {
-  try {
-    const r = await $fetch<{ key: string | null }>(`/api/events/${id}/publish-key`)
-    currentPublishKey.value = r.key
-  } catch {
-    /* transient — leave as-is */
-  }
-}
-function generatePublishKey(): void {
-  const run = async (): Promise<void> => {
-    rotatingKey.value = true
-    try {
-      await $fetch(`/api/events/${id}/publish-key`, { method: 'POST' })
-      await Promise.all([loadPublishKey(), refreshEvent()])
-      if (event.value) settings.value = structuredClone(toRaw(event.value))
-      toast.success('Publish key generated')
-    } catch (e: any) {
-      toast.error('Generation failed: ' + (e?.data?.statusMessage || e?.message || ''))
-    } finally {
-      rotatingKey.value = false
-    }
-  }
-  if (currentPublishKey.value || event.value?.publishKeyPreview) {
-    confirm.ask('Generating a new key invalidates the old one immediately. Continue?', run, { actionLabel: 'Regenerate' })
-  } else {
-    run()
-  }
-}
-function setCustomPublishKey(): void {
-  if (!customKeyValid.value) return
-  const run = async (): Promise<void> => {
-    rotatingKey.value = true
-    try {
-      await $fetch(`/api/events/${id}/publish-key`, {
-        method: 'POST',
-        body: { key: customKey.value.trim() },
-      })
-      customKey.value = ''
-      await Promise.all([loadPublishKey(), refreshEvent()])
-      if (event.value) settings.value = structuredClone(toRaw(event.value))
-      toast.success('Custom publish key set')
-    } catch (e: any) {
-      toast.error('Set failed: ' + (e?.data?.statusMessage || e?.message || ''))
-    } finally {
-      rotatingKey.value = false
-    }
-  }
-  if (currentPublishKey.value || event.value?.publishKeyPreview) {
-    confirm.ask('Setting a custom key invalidates the old one immediately. Continue?', run, { actionLabel: 'Apply custom' })
-  } else {
-    run()
-  }
-}
-function clearPublishKey(): void {
-  confirm.ask('Clear the publish key? Publishes using this key will be rejected.', async () => {
-    try {
-      await $fetch(`/api/events/${id}/publish-key`, { method: 'DELETE' })
-      currentPublishKey.value = null
-      await refreshEvent()
-      toast.info('Cleared')
-    } catch (e: any) {
-      toast.error('Clear failed: ' + (e?.data?.statusMessage || e?.message || ''))
-    }
-  }, { actionLabel: 'Clear' })
-}
-
-const generating = ref(false)
-async function generateOne(): Promise<void> {
-  if (!genForm.studentNumber.trim() || !genForm.name.trim()) {
-    toast.error('Please fill in student ID and name')
-    return
-  }
-  generating.value = true
-  try {
-    const k = await $fetch<GeneratedKey>(`/api/events/${id}/keys`, { method: 'POST', body: genForm })
-    freshKeys.value = [k]
-    genForm.studentNumber = ''
-    genForm.name = ''
-    genForm.email = ''
-    genForm.seatLabel = ''
-    genForm.streamName = ''
-    await Promise.all([refreshRoster(), refreshKeys()])
-    toast.success('Stream key generated (copy it now, shown only once)')
-  } catch (e: any) {
-    toast.error('Generation failed: ' + (e?.data?.statusMessage || e?.message || ''))
-  } finally {
-    generating.value = false
-  }
-}
-async function generateAll(): Promise<void> {
-  generating.value = true
-  try {
-    const ks = await $fetch<GeneratedKey[]>(`/api/events/${id}/keys/bulk`, { method: 'POST' })
-    freshKeys.value = ks
-    await Promise.all([refreshRoster(), refreshKeys()])
-    toast.success(ks.length ? `Stream keys generated for ${ks.length} students` : 'All students already have stream keys')
-  } catch (e: any) {
-    toast.error('Generation failed: ' + (e?.data?.statusMessage || e?.message || ''))
-  } finally {
-    generating.value = false
-  }
-}
-function revokeKey(keyId: number): void {
-  confirm.ask('Revoke this stream key? The student will not be able to publish until it is regenerated.', async () => {
-    try {
-      await $fetch(`/api/events/${id}/keys/${keyId}`, { method: 'DELETE' })
-      await refreshKeys()
-      toast.info('Revoked')
-    } catch (e: any) {
-      toast.error('Revoke failed: ' + (e?.data?.statusMessage || e?.message || ''))
-    }
-  }, { actionLabel: 'Revoke' })
-}
 
 async function copy(text: string, label = 'Copied'): Promise<void> {
   try {
@@ -428,18 +215,9 @@ const rosterColumns: DataTableColumn[] = [
   { key: 'studentNumber', header: 'Student ID' },
   { key: 'name', header: 'Name' },
   { key: 'seatLabel', header: 'Seat', class: 'text-muted-foreground' },
-  { key: 'hasKey', header: 'Stream key' },
   { key: 'actions', header: '', headClass: 'w-0' },
 ]
 
-const keyColumns: DataTableColumn[] = [
-  { key: 'streamName', header: 'Stream name' },
-  { key: 'studentLabel', header: 'Student' },
-  { key: 'tokenPreview', header: 'Preview', class: 'font-mono text-xs text-muted-foreground' },
-  { key: 'revoked', header: 'Status' },
-  { key: 'lastUsedAt', header: 'Last used', class: 'text-muted-foreground' },
-  { key: 'actions', header: '', headClass: 'w-0' },
-]
 </script>
 
 <template>
@@ -447,7 +225,7 @@ const keyColumns: DataTableColumn[] = [
     <div class="space-y-1">
       <NuxtLink to="/dashboard/events" class="text-sm text-muted-foreground hover:text-foreground">← Back to events</NuxtLink>
       <h1 class="text-2xl font-semibold">{{ event.name }}</h1>
-      <p class="text-muted-foreground">slug: {{ event.slug }}</p>
+      <p class="text-muted-foreground">event key: <code class="font-mono">{{ event.slug }}</code></p>
       <p v-if="event.description" class="text-muted-foreground">{{ event.description }}</p>
       <p class="text-xs text-muted-foreground">
         Status: {{ event.status }} · Visibility: {{ visibilityLabel[event.visibility] }}
@@ -457,43 +235,23 @@ const keyColumns: DataTableColumn[] = [
       </p>
     </div>
 
-    <!-- freshly generated keys (plaintext shown once) -->
-    <Card v-if="isAdmin && freshKeys.length" class="border-ok/50">
-      <CardHeader>
-        <div class="flex items-center justify-between">
-          <CardTitle>Newly generated stream keys (shown only once, copy them now)</CardTitle>
-          <Button variant="ghost" size="sm" @click="freshKeys = []">Close</Button>
-        </div>
-      </CardHeader>
-      <CardContent class="space-y-3">
-        <div v-for="k in freshKeys" :key="k.id" class="space-y-1 border-t pt-3 first:border-t-0 first:pt-0">
-          <div class="font-medium">{{ k.studentLabel }} ({{ k.studentNumber }})</div>
-          <div class="flex flex-wrap items-center gap-2 text-sm">
-            <span class="min-w-20 text-xs text-muted-foreground">OBS server</span>
-            <code class="font-mono text-xs">{{ obs.server.value }}</code>
-            <Button variant="link" class="h-auto p-0 text-xs" @click="copy(obs.server.value, 'Copied server address')">Copy</Button>
-          </div>
-          <div class="flex flex-wrap items-center gap-2 text-sm">
-            <span class="min-w-20 text-xs text-muted-foreground">Stream key</span>
-            <code class="font-mono text-xs">{{ obs.streamKey(k.streamName, k.token) }}</code>
-            <Button variant="link" class="h-auto p-0 text-xs" @click="copy(obs.streamKey(k.streamName, k.token), 'Copied stream key')">Copy</Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-
-    <!-- settings (admin-only) -->
     <Card v-if="isAdmin">
       <CardHeader><CardTitle>Event settings</CardTitle></CardHeader>
       <CardContent v-if="settings" class="space-y-4">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="space-y-1.5">
-            <Label>Name</Label>
+            <Label>Display Name</Label>
             <Input v-model="settings.name" />
           </div>
           <div class="space-y-1.5">
-            <Label>slug</Label>
+            <Label>Event key</Label>
             <Input v-model="settings.slug" />
+            <p v-if="!eventKeyValid" class="text-xs text-destructive">
+              Lowercase letters, digits, <code>_</code> and <code>-</code> only.
+            </p>
+            <p class="text-xs text-muted-foreground">
+              Also the guide URL (<code>/e/&lt;event-key&gt;</code>) and the OBS stream key contestants paste.
+            </p>
           </div>
           <div class="space-y-1.5 sm:col-span-2">
             <Label>Description</Label>
@@ -565,121 +323,6 @@ const keyColumns: DataTableColumn[] = [
       </CardContent>
     </Card>
 
-    <!-- per-event publish token (admin-only) -->
-    <Card v-if="isAdmin">
-      <CardHeader>
-        <div class="flex items-center justify-between">
-          <CardTitle>Event publish token</CardTitle>
-          <Badge v-if="event.publishTokenPreview" variant="success">Set <code class="ml-1 font-mono text-xs">{{ event.publishTokenPreview }}…</code></Badge>
-          <Badge v-else variant="secondary">Not set</Badge>
-        </div>
-      </CardHeader>
-      <CardContent class="space-y-3">
-        <p class="text-xs text-muted-foreground">
-          One publish token per event, shared with all publishers for this event. The OBS stream key is
-          <code class="font-mono">&lt;stream-name&gt;?token=&lt;token&gt;</code>, valid only within the event time window
-          (use either this or per-student stream keys).
-        </p>
-
-        <div v-if="freshPublishToken" class="space-y-1 rounded-md border border-ok/50 p-3 text-sm">
-          <strong>{{ freshPublishToken.isCustom ? 'Token applied' : 'New token (shown only once, copy it now)' }}</strong>
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="min-w-20 text-xs text-muted-foreground">Token</span>
-            <code class="font-mono text-xs">{{ freshPublishToken.token }}</code>
-            <Button variant="link" class="h-auto p-0 text-xs" @click="copy(freshPublishToken.token, 'Copied token')">Copy</Button>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="min-w-20 text-xs text-muted-foreground">OBS server</span>
-            <code class="font-mono text-xs">{{ obs.server.value }}</code>
-            <Button variant="link" class="h-auto p-0 text-xs" @click="copy(obs.server.value, 'Copied server address')">Copy</Button>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="min-w-20 text-xs text-muted-foreground">Stream key example</span>
-            <code class="font-mono text-xs">{{ obs.streamKey('stream-name', freshPublishToken.token) }}</code>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-end gap-3">
-          <Button v-if="event.publishTokenPreview" variant="outline" :disabled="rotatingToken" @click="clearPublishToken">Clear</Button>
-          <Button :disabled="rotatingToken" @click="rotatePublishToken">
-            {{ rotatingToken ? 'Generating…' : event.publishTokenPreview ? 'Regenerate' : 'Generate random token' }}
-          </Button>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <Input
-            v-model="customToken"
-            placeholder="Or custom token (8–128 chars, alphanumeric and . _ - ~)"
-            class="min-w-50 flex-1"
-            @keyup.enter="setCustomPublishToken"
-          />
-          <Button :disabled="rotatingToken || !customTokenValid" @click="setCustomPublishToken">Apply custom</Button>
-        </div>
-        <p v-if="customToken && !customTokenValid" class="text-xs text-destructive">
-          Token must be 8–128 chars, containing only letters, digits, and <code class="font-mono">. _ - ~</code>.
-        </p>
-      </CardContent>
-    </Card>
-
-    <!-- per-event publish key (admin-only) — the shared key on the participant guide -->
-    <Card v-if="isAdmin">
-      <CardHeader>
-        <div class="flex items-center justify-between">
-          <CardTitle>Event publish key (participant guide)</CardTitle>
-          <Badge v-if="event.publishKeyPreview" variant="success">Set <code class="ml-1 font-mono text-xs">{{ event.publishKeyPreview }}…</code></Badge>
-          <Badge v-else variant="secondary">Not set</Badge>
-        </div>
-      </CardHeader>
-      <CardContent class="space-y-3">
-        <p class="text-xs text-muted-foreground">
-          One shared key per event, shown in full on the
-          <NuxtLink :to="`/e/${event.slug}`" target="_blank" class="underline hover:text-primary">participant guide</NuxtLink>.
-          Contestants paste it as the OBS stream key ALONE — the RTMP gateway derives each publisher's stream name
-          (their account email when authenticated, else the connection IP), so the whole class can stream at once.
-          This is distinct from the hashed publish token above.
-        </p>
-
-        <div v-if="currentPublishKey" class="space-y-1 rounded-md border border-ok/50 p-3 text-sm">
-          <strong>Publish key</strong>
-          <div class="flex flex-wrap items-center gap-2">
-            <code class="break-all font-mono text-xs">{{ currentPublishKey }}</code>
-            <Button variant="link" class="h-auto p-0 text-xs" @click="copy(currentPublishKey, 'Copied publish key')">Copy</Button>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="min-w-20 text-xs text-muted-foreground">OBS server</span>
-            <code class="font-mono text-xs">{{ obs.server.value }}</code>
-            <Button variant="link" class="h-auto p-0 text-xs" @click="copy(obs.server.value, 'Copied server address')">Copy</Button>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="min-w-20 text-xs text-muted-foreground">Stream key</span>
-            <code class="font-mono text-xs">{{ currentPublishKey }}</code>
-            <span class="text-xs text-muted-foreground">(the key itself — no username prefix)</span>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-end gap-3">
-          <Button v-if="event.publishKeyPreview || currentPublishKey" variant="outline" :disabled="rotatingKey" @click="clearPublishKey">Clear</Button>
-          <Button :disabled="rotatingKey" @click="generatePublishKey">
-            {{ rotatingKey ? 'Generating…' : event.publishKeyPreview || currentPublishKey ? 'Regenerate' : 'Generate random key' }}
-          </Button>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <Input
-            v-model="customKey"
-            placeholder="Or custom key (8–128 chars, alphanumeric and . _ - ~)"
-            class="min-w-50 flex-1"
-            @keyup.enter="setCustomPublishKey"
-          />
-          <Button :disabled="rotatingKey || !customKeyValid" @click="setCustomPublishKey">Apply custom</Button>
-        </div>
-        <p v-if="customKey && !customKeyValid" class="text-xs text-destructive">
-          Key must be 8–128 chars, containing only letters, digits, and <code class="font-mono">. _ - ~</code>.
-        </p>
-      </CardContent>
-    </Card>
-
-    <!-- roster (admin-only) -->
     <Card v-if="isAdmin">
       <CardHeader><CardTitle>Roster ({{ roster?.length ?? 0 }})</CardTitle></CardHeader>
       <CardContent class="space-y-4">
@@ -695,9 +338,6 @@ const keyColumns: DataTableColumn[] = [
           empty="No roster yet."
         >
           <template #cell-seatLabel="{ row }">{{ row.seatLabel ?? '—' }}</template>
-          <template #cell-hasKey="{ row }">
-            <Badge :variant="row.hasKey ? 'success' : 'secondary'">{{ row.hasKey ? 'Generated' : 'None' }}</Badge>
-          </template>
           <template #cell-actions="{ row }">
             <Button size="sm" variant="destructive" @click="removeEntry(row.enrollmentId)">Remove</Button>
           </template>
@@ -705,66 +345,6 @@ const keyColumns: DataTableColumn[] = [
       </CardContent>
     </Card>
 
-    <!-- keys (admin-only) -->
-    <Card v-if="isAdmin">
-      <CardHeader>
-        <div class="flex items-center justify-between">
-          <CardTitle>Stream keys ({{ keys?.length ?? 0 }})</CardTitle>
-          <Button :disabled="generating" @click="generateAll">Bulk generate for students without keys</Button>
-        </div>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        <details class="group">
-          <summary class="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">Generate single key</summary>
-          <div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div class="space-y-1.5">
-              <Label>Student ID *</Label>
-              <Input v-model="genForm.studentNumber" />
-            </div>
-            <div class="space-y-1.5">
-              <Label>Name *</Label>
-              <Input v-model="genForm.name" />
-            </div>
-            <div class="space-y-1.5">
-              <Label>Email</Label>
-              <Input v-model="genForm.email" />
-            </div>
-            <div class="space-y-1.5">
-              <Label>Seat</Label>
-              <Input v-model="genForm.seatLabel" />
-            </div>
-            <div class="space-y-1.5 sm:col-span-2">
-              <Label>Custom stream name (leave blank to use student ID)</Label>
-              <Input v-model="genForm.streamName" />
-            </div>
-          </div>
-          <div class="mt-3 flex items-center justify-end">
-            <Button :disabled="generating" @click="generateOne">Generate</Button>
-          </div>
-        </details>
-
-        <DataTable
-          :columns="keyColumns"
-          :rows="keys ?? []"
-          :row-key="(k: KeyView) => k.id"
-          empty="No stream keys yet."
-        >
-          <template #cell-studentLabel="{ row }">{{ row.studentLabel ?? '—' }}</template>
-          <template #cell-revoked="{ row }">
-            <Badge :variant="row.revoked ? 'destructive' : 'success'">{{ row.revoked ? 'Revoked' : 'Active' }}</Badge>
-          </template>
-          <template #cell-lastUsedAt="{ row }">
-            {{ row.lastUsedAt ? new Date(row.lastUsedAt).toLocaleString('en-US', { hour12: false }) : '—' }}
-          </template>
-          <template #cell-actions="{ row }">
-            <div class="flex justify-end gap-2">
-              <Button size="sm" variant="outline" @click="copy(row.streamName, 'Copied stream name')">Copy stream name</Button>
-              <Button v-if="!row.revoked" size="sm" variant="destructive" @click="revokeKey(row.id)">Revoke</Button>
-            </div>
-          </template>
-        </DataTable>
-      </CardContent>
-    </Card>
 
     <SaveBar :dirty="settingsDirty" :saving="saving" :saved="saved" @save="saveSettings" @discard="resetSettings" />
     <UnsavedLeaveDialog

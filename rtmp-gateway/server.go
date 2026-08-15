@@ -176,6 +176,16 @@ func handleOBS(conn net.Conn, app *appClient) {
 				}
 
 				if pol := app.policy(token); pol.PublishKey {
+					// Closed/archived event: reject with BadName — OBS treats a
+					// publish-time "invalid stream" as terminal and STOPS, rather
+					// than auto-retrying forever against a silently-closing SRS.
+					if !pol.WindowOpen {
+						log.Printf("%s publish '%s' rejected: event window closed", remote, name)
+						_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
+							"NetStream.Publish.BadName",
+							"This event's streaming window is closed (not started or already ended).")})
+						return
+					}
 					final := explicit
 					if pol.RequireAccountAuth {
 						if !authed {
