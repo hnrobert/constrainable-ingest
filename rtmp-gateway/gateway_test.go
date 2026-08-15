@@ -264,7 +264,12 @@ func mockAppMux(token, authKey, openKey, user, salt, salted2 string) *http.Serve
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		if r.URL.Query().Get("email") == user {
+		email := r.URL.Query().Get("email")
+		if email == "banned@x.com" {
+			_, _ = io.WriteString(w, `{"salt":"`+salt+`","banned":true}`)
+			return
+		}
+		if email == user {
 			_, _ = io.WriteString(w, `{"salt":"`+salt+`"}`)
 		} else {
 			w.WriteHeader(http.StatusNotFound)
@@ -533,4 +538,31 @@ func b2s(b bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// A kick-banned user must be refused at STAGE 2 of the dance (fatal authfailed),
+// so OBS stops its reconnect loop at connect time instead of reaching publish.
+func TestStage2KickBanRefusesConnection(t *testing.T) {
+	const (
+		user  = "robert@example.com"
+		salt  = "deadbeefsalt"
+		token = "test-token"
+	)
+	salted2 := b64(md5raw(user + salt + "123456"))
+	app := httptest.NewServer(mockAppMux(token, "", "", user, salt, salted2))
+	defer app.Close()
+	addr := startGateway(t, app.URL, token)
+
+	c, cw, cr := openClient(t, addr)
+	defer c.Close()
+	sendConnect(cw, "live")
+	cmdField(cr) // stage1 demand
+	c.Close()
+
+	c, cw, cr = openClient(t, addr)
+	defer c.Close()
+	sendConnect(cw, "live?authmod=adobe&user=banned@x.com")
+	if got := cmdField(cr); !strings.Contains(got, "reason=authfailed") {
+		t.Fatalf("banned user stage2: expected fatal authfailed, got %q", got)
+	}
 }

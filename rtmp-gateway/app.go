@@ -28,15 +28,24 @@ func newAppClient(base, token string) *appClient {
 	}
 }
 
+// saltResult carries the stage-2 salt plus the kick-ban flag: a kicked user's
+// OBS reconnect carries its email in the dance, so refusing HERE (fatal auth
+// error from the caller) stops the reconnect loop at connect time.
+type saltResult struct {
+	Salt   string
+	Banned bool
+}
+
 // salt returns the user's authmod salt (needed at stage 2 so librtmp can compute
-// salted2 client-side). On any error / unknown user it returns a random salt so
-// the challenge is byte-identical and the stage-3 verify simply fails — the
-// dance reveals nothing about whether the account exists.
-func (a *appClient) salt(email string) string {
+// salted2 client-side) and whether the user's stream is kick-banned. On any
+// error / unknown user it returns a random salt so the challenge is
+// byte-identical and the stage-3 verify simply fails — the dance reveals
+// nothing about whether the account exists.
+func (a *appClient) salt(email string) saltResult {
 	u := a.base + "/api/srs/rtmp-auth/salt?email=" + url.QueryEscape(email)
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
-		return randHex(8)
+		return saltResult{Salt: randHex(8)}
 	}
 	req.Header.Set("x-rtmp-auth", a.token)
 	resp, err := a.hc.Do(req)
@@ -44,16 +53,17 @@ func (a *appClient) salt(email string) string {
 		if resp != nil {
 			resp.Body.Close()
 		}
-		return randHex(8)
+		return saltResult{Salt: randHex(8)}
 	}
 	defer resp.Body.Close()
 	var body struct {
-		Salt string `json:"salt"`
+		Salt   string `json:"salt"`
+		Banned bool   `json:"banned"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil || body.Salt == "" {
-		return randHex(8)
+		return saltResult{Salt: randHex(8)}
 	}
-	return body.Salt
+	return saltResult{Salt: body.Salt, Banned: body.Banned}
 }
 
 // verifyResult distinguishes a WRONG PASSWORD on a real account (fatal) from

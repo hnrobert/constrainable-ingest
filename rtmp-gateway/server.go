@@ -136,9 +136,17 @@ func handleOBS(conn net.Conn, app *appClient) {
 						log.Printf("%s --> connect success (no credentials, open)", remote)
 					} else {
 						// ---- STAGE 2: send the salt + opaque challenge ----
-						salt := app.salt(user) // real salt, or random if unknown
+						s := app.salt(user) // real salt, or random if unknown
+						if s.Banned {
+							// Recently kicked: refuse the CONNECT with the fatal
+							// auth error — same terminal form as a wrong password,
+							// so OBS stops reconnecting instead of looping.
+							log.Printf("%s [stage2] user=%s is kick-banned → refusing connection", remote, user)
+							_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdError(txn, "?reason=authfailed&authmod=adobe&user="+user)})
+							return
+						}
 						opaque := randHex(16)
-						desc := "?reason=needauth&authmod=adobe&user=" + user + "&salt=" + salt + "&opaque=" + opaque
+						desc := "?reason=needauth&authmod=adobe&user=" + user + "&salt=" + s.Salt + "&opaque=" + opaque
 						_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdError(txn, desc)})
 						log.Printf("%s [stage2] user=%s sent salt challenge", remote, user)
 						return // close; OBS reconnects for stage 3

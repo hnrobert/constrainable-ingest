@@ -24,3 +24,13 @@ export function isKickBanned(streamName: string): boolean {
   }
   return true
 }
+
+/**
+ * Map an account email to the stream-name form the RTMP gateway synthesizes
+ * (same rules as the gateway's safeStreamName: anything outside [A-Za-z0-9._-]
+ * becomes '_'). The dance's stage-2 lookup only knows the EMAIL, but bans are
+ * recorded against session stream names.
+ */
+export function streamKeyForEmail(email: string): string {
+  return email.replace(/[^A-Za-z0-9._-]/g, '_')
+}

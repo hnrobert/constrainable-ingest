@@ -1,20 +1,15 @@
 /**
- * Internal RTMP-auth endpoint: the Go gateway fetches a publisher's authmod salt
- * during the Adobe challenge-response stage 2. The gateway must send the user's
- * REAL salt so librtmp can compute `salted2 = base64(md5(user + salt + password))`
- * client-side; a wrong salt makes the later response unverifiable.
- *
- * Guarded by the shared RTMP_AUTH_TOKEN header (never session auth). Under the
- * /api/srs/ allowlist for SRS-hook parity, but this touches a password-adjacent
- * path, so the token gate is mandatory. Unknown / unregistered email → 404 (the
- * gateway then sends a random salt so the challenge looks identical and the
- * stage-3 verify simply fails — no user enumeration via the dance).
- *
- * See server/utils/authmod.ts + docs/STREAMING.md.
+ * Stage-2 salt lookup for the RTMP gateway, plus the kick-ban flag: a kicked
+ * publisher's OBS reconnects within seconds and its dance carries the account
+ * email HERE — refusing at this stage with a fatal auth error (the gateway's
+ * job) stops the reconnect loop at CONNECT time, before any publish attempt.
+ * Unknown users get a random salt (byte-identical challenge, no enumeration).
+ * Token-gated like the other /api/srs/rtmp-auth endpoints: never public.
  */
 import { createError, getHeader, getQuery } from 'h3'
 import { env } from '../../../utils/env'
 import { UsersRepository } from '../../../repositories/users.repository'
+import { isKickBanned, streamKeyForEmail } from '../../../services/kick-bans'
 
 export default defineEventHandler((event) => {
   if (getHeader(event, 'x-rtmp-auth') !== env.rtmpAuthToken) {
@@ -22,8 +17,14 @@ export default defineEventHandler((event) => {
   }
   const email = String(getQuery(event).email ?? '').trim().toLowerCase()
   const user = email ? UsersRepository.findByEmail(email) : undefined
+  const banned = !!email && isKickBanned(streamKeyForEmail(email))
   if (!user?.authmodSalt) {
-    throw createError({ statusCode: 404, statusMessage: 'Not found' })
+    // random salt keeps the challenge shape identical for unknown users
+    return { salt: randomSalt(), banned }
   }
-  return { salt: user.authmodSalt }
+  return { salt: user.authmodSalt, banned }
 })
+
+function randomSalt(): string {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+}

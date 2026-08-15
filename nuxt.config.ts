@@ -12,7 +12,32 @@ export default defineNuxtConfig({
     plugins: [tailwindcss()],
     // email-poster/vue ships .vue source; esbuild can't pre-bundle .vue, so
     // exclude the package from dep optimization and let Vite compile it instead.
-    optimizeDeps: { exclude: ['email-poster'] },
+    //
+    // PRE-DECLARE every runtime dep instead of letting Vite discover them lazily:
+    // a mid-session discovery (e.g. first visit to the streams page importing
+    // mpegts.js/socket.io-client) triggers re-optimization + a full reload, and
+    // Safari serves the reload with a MIX of old/new module instances — two
+    // runtime-core copies, each with its own currentRenderingInstance — which
+    // crashes hydration with "null is not an object (evaluating
+    // 'currentRenderingInstance.ce')". Optimizing everything up front removes
+    // the second optimization wave entirely.
+    optimizeDeps: {
+      exclude: ['email-poster'],
+      include: [
+        'reka-ui',
+        'class-variance-authority',
+        'clsx',
+        'tailwind-merge',
+        'lucide-vue-next',
+        '@lucide/vue',
+        '@vueuse/core',
+        'vue-sonner',
+        'mpegts.js',
+        'socket.io-client',
+        'jose',
+        'picomatch',
+      ],
+    },
     server: {
       // Vite's Host check 403s any caller that isn't localhost/127.0.0.1.
       // Allow `host.docker.internal` so a Dockerized SRS's on_publish hook can
