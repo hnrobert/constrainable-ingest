@@ -163,7 +163,7 @@ function parseCsv(text: string): { studentNumber: string; name: string; email?: 
 async function importRoster(): Promise<void> {
   const students = parseCsv(csvText.value)
   if (students.length === 0) {
-    toast.error('No valid rows parsed (student ID, name)')
+    toast.error('No valid rows parsed (user ID, name)')
     return
   }
   importing.value = true
@@ -182,7 +182,7 @@ async function importRoster(): Promise<void> {
   }
 }
 function removeEntry(enrollmentId: number): void {
-  confirm.ask('Remove this student from the roster?', async () => {
+  confirm.ask('Remove this user from the roster?', async () => {
     try {
       await $fetch(`/api/events/${id}/roster/${enrollmentId}`, { method: 'DELETE' })
       await refreshRoster()
@@ -212,7 +212,7 @@ const statusOptions: { value: EventStatus; label: string }[] = [
 ]
 
 const rosterColumns: DataTableColumn[] = [
-  { key: 'studentNumber', header: 'Student ID' },
+  { key: 'studentNumber', header: 'User ID' },
   { key: 'name', header: 'Name' },
   { key: 'seatLabel', header: 'Seat', class: 'text-muted-foreground' },
   { key: 'actions', header: '', headClass: 'w-0' },
@@ -227,6 +227,9 @@ const rosterColumns: DataTableColumn[] = [
       <h1 class="text-2xl font-semibold">{{ event.name }}</h1>
       <p class="text-muted-foreground">event key: <code class="font-mono">{{ event.slug }}</code></p>
       <p v-if="event.description" class="text-muted-foreground">{{ event.description }}</p>
+      <NuxtLink :to="`/dashboard/events/${id}/recordings`" class="text-sm text-primary underline-offset-4 hover:underline">
+        View this event's recordings →
+      </NuxtLink>
       <p class="text-xs text-muted-foreground">
         Status: {{ event.status }} · Visibility: {{ visibilityLabel[event.visibility] }}
         <template v-if="event.visibility === 'groups' && event.groups.length">
@@ -326,7 +329,7 @@ const rosterColumns: DataTableColumn[] = [
     <Card v-if="isAdmin">
       <CardHeader><CardTitle>Roster ({{ roster?.length ?? 0 }})</CardTitle></CardHeader>
       <CardContent class="space-y-4">
-        <p class="text-xs text-muted-foreground">Paste CSV: one row per line as <code>student_id,name[,email][,seat]</code>. A header row is skipped automatically.</p>
+        <p class="text-xs text-muted-foreground">Paste CSV: one row per line as <code>user_id,name[,email][,seat]</code>. A header row is skipped automatically.</p>
         <Textarea v-model="csvText" rows="4" placeholder="2024001,Alice,alice@x.edu,A1&#10;2024002,Bob,,B2" />
         <div class="flex items-center justify-end gap-3">
           <Button variant="outline" :disabled="importing" @click="importRoster">{{ importing ? 'Importing…' : 'Import' }}</Button>

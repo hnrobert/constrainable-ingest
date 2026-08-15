@@ -21,9 +21,11 @@ export interface RecordingView {
   filePath: string
   sizeBytes: number
   durationSec: number | null
+  avgFps: number | null
   width: number | null
   height: number | null
   startedAt: number
+  endedAt: number | null
   retainedUntil: number | null
   createdAt: number
 }
@@ -44,9 +46,11 @@ function toView(r: Recording): RecordingView {
     filePath: r.filePath,
     sizeBytes: r.sizeBytes,
     durationSec: r.durationSec ?? null,
+    avgFps: r.avgFps ?? null,
     width: r.width ?? null,
     height: r.height ?? null,
     startedAt: r.startedAt.getTime(),
+    endedAt: r.endedAt ? r.endedAt.getTime() : null,
     retainedUntil: r.retainedUntil ? r.retainedUntil.getTime() : null,
     createdAt: r.createdAt.getTime(),
   }

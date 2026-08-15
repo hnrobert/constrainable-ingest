@@ -9,7 +9,7 @@
 import { createError, getRouterParam, sendStream } from 'h3'
 import { Readable } from 'node:stream'
 import { env } from '../../../../utils/env'
-import { buildRtmpUrl } from '../../../../utils/srs-url'
+import { buildFlvPullUrl } from '../../../../utils/srs-url'
 
 const cache = new Map<string, { ts: number; bytes: Uint8Array }>()
 const TTL_MS = 3_000
@@ -32,8 +32,14 @@ export default defineEventHandler(async (event) => {
     env.ffmpegPath,
     '-v',
     'error',
+    // FLV pull (RTMP starves on low-fps streams, see srs-url.ts); tiny analysis
+    // budget so the frame arrives immediately.
+    '-probesize',
+    '65536',
+    '-analyzeduration',
+    '2000000',
     '-i',
-    buildRtmpUrl('live', stream),
+    buildFlvPullUrl(stream),
     '-frames:v',
     '1',
     '-q:v',

@@ -111,6 +111,20 @@ export async function handlePublish(
     startedAt: new Date(),
   })
 
+  // Supersede: an older OPEN session under the same stream name can only be a
+  // zombie (SRS allows one live publisher per name; hot-reloaded monitor loops
+  // and lost on_unpublish hooks leave orphans). Close them now so the panel
+  // never shows two "Publishing" rows for one person.
+  for (const stale of PublishSessionsRepository.findActive().filter(
+    (s) => s.streamName === ctx.stream && s.id !== row.id,
+  )) {
+    PublishSessionsRepository.markEnded(stale.id, stale.compliant ? 'compliant' : 'ended', row.startedAt)
+    audit('warn', 'publish', `superseded zombie session #${stale.id} (${ctx.stream})`, {
+      streamName: ctx.stream,
+      detail: { supersededBy: row.id },
+    })
+  }
+
   const session: ActiveSession = {
     sessionId: row.id,
     eventId: ctx.eventId ?? null,
@@ -246,7 +260,7 @@ async function monitorSession(s: ActiveSession, studentLabel: string | null): Pr
         metrics.compliant = true
         metrics.status = 'compliant'
         persistStatus(s.sessionId, 'compliant', undefined, true)
-        recorder.markCompliant(s.streamName, result.width, result.height)
+        recorder.markCompliant(s.streamName, result.width, result.height, result.fps || undefined)
         emit('session:metric', snapshot(s, metrics))
       }
     }

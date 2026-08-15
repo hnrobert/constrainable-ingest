@@ -20,7 +20,6 @@ const PUBLIC = ['/', '/login', '/invite']
 // Dashboard sub-routes reserved for admins (regular users get redirected away).
 const ADMIN_ONLY = [
   '/dashboard/streams',
-  '/dashboard/recordings',
   '/dashboard/config',
   '/dashboard/mail',
   '/dashboard/audit',

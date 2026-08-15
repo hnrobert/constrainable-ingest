@@ -22,8 +22,17 @@ export async function reconcileStaleSessions(): Promise<void> {
   const live = await listLiveStreamNames()
   if (live === null) return // SRS unreachable — skip this sweep entirely
 
+  // Among open sessions, keep only the NEWEST per stream name: SRS allows one
+  // live publisher per name, so an older open row with the same name is a
+  // zombie even while the name itself is live.
+  const newestByName = new Map<string, number>()
   for (const s of open) {
-    if (live.has(s.streamName)) continue
+    const cur = newestByName.get(s.streamName)
+    if (cur == null || s.id > cur) newestByName.set(s.streamName, s.id)
+  }
+
+  for (const s of open) {
+    if (live.has(s.streamName) && newestByName.get(s.streamName) === s.id) continue
     const finalStatus: SessionStatus = s.compliant ? 'compliant' : 'ended'
     const endedAt = new Date()
     PublishSessionsRepository.markEnded(s.id, finalStatus, endedAt)

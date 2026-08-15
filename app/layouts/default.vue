@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   CalendarDays,
   Radio,
-  Film,
   Users,
   UsersRound,
   Settings,
@@ -49,7 +48,6 @@ const generalNav: NavItem[] = [
 
 const adminNav: NavItem[] = [
   { label: 'Live', to: '/dashboard/streams', icon: Radio },
-  { label: 'Recordings', to: '/dashboard/recordings', icon: Film },
   { label: 'Users', to: '/dashboard/users', icon: Users },
   { label: 'Groups', to: '/dashboard/groups', icon: UsersRound },
   { label: 'Config', to: '/dashboard/config', icon: Settings },

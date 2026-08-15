@@ -349,18 +349,16 @@ func ipStreamName(remote string) string {
 	return b.String()
 }
 
-// safeStreamName makes a synthesized stream name safe for EVERY downstream
-// consumer. ffmpeg/ffprobe's RTMP URL parser treats '@' as the
-// user:password@host separator, so an email-derived name like
-// "hnrobert@qq.com" hangs its pull (recorder + compliance probe both die);
-// URL-encoding does not help. Replacing characters outside [A-Za-z0-9._-]
-// with '_' keeps names unique, readable, and valid in RTMP paths, HTTP-FLV
-// URLs, and filenames alike.
+// safeStreamName keeps a synthesized stream name safe for every downstream
+// consumer. '@' is now KEPT (emails read as-is): all pulls (recorder, probe,
+// snapshots) go over HTTP-FLV, where a raw '@' in the URL path works — only
+// ffmpeg's RTMP URL parser (user:pass@host) chokes on it, and nothing pulls
+// RTMP anymore. Characters outside [A-Za-z0-9._@-] still become '_'.
 func safeStreamName(name string) string {
 	var b strings.Builder
 	for _, r := range name {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '.', r == '_':
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '.', r == '_', r == '@':
 			b.WriteRune(r)
 		default:
 			b.WriteByte('_')

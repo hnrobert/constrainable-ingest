@@ -29,7 +29,6 @@ const statusVariant: Record<EventStatus, 'secondary' | 'warning' | 'success' | '
 const quickLinks: { to: string; label: string }[] = [
   { to: '/dashboard/events', label: 'Events' },
   { to: '/dashboard/streams', label: 'Live streams' },
-  { to: '/dashboard/recordings', label: 'Recordings' },
   { to: '/dashboard/users', label: 'Users' },
   { to: '/dashboard/groups', label: 'Groups & invites' },
   { to: '/dashboard/config', label: 'Config' },

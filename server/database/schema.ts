@@ -207,10 +207,15 @@ export const recordings = sqliteTable(
     /** path relative to RECORD_DIR */
     filePath: text('file_path').notNull(),
     sizeBytes: integer('size_bytes').notNull().default(0),
+    /** cumulative duration across merged segments (same user re-publishing) */
     durationSec: real('duration_sec'),
+    /** average fps across merged segments */
+    avgFps: real('avg_fps'),
     width: integer('width'),
     height: integer('height'),
     startedAt: integer('started_at', { mode: 'timestamp' }).notNull().default(now),
+    /** end of the LATEST merged segment */
+    endedAt: integer('ended_at', { mode: 'timestamp' }),
     retainedUntil: integer('retained_until', { mode: 'timestamp' }),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(now),
   },
