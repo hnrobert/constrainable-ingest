@@ -18,7 +18,10 @@ function kick(s: SessionSnapshot): void {
     `Kick ${s.streamName}? The publisher will be disconnected immediately (their recording is kept).`,
     async () => {
       try {
-        await $fetch(`/api/streams/clients/${encodeURIComponent(s.srsClientId!)}`, { method: 'DELETE' })
+        await $fetch(
+          `/api/streams/clients/${encodeURIComponent(s.srsClientId!)}?stream=${encodeURIComponent(s.streamName)}`,
+          { method: 'DELETE' },
+        )
         toast.success(`Kicked ${s.streamName}`)
         // the row disappears on its own via the session:stop socket event
       } catch (e: any) {

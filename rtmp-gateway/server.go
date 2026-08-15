@@ -102,23 +102,27 @@ func handleOBS(conn net.Conn, app *appClient) {
 				qs := parseApp(appField)
 
 				if _, ok := qs["response"]; ok {
-					// ---- STAGE 3: verify GRACEFULLY. A failed/unknown verification
-					// still accepts the connection (authed=false) — real OBS
-					// cannot re-authenticate mid-session, so rejection happens at
-					// PUBLISH via the per-event policy, where the stream key
-					// finally identifies the event. ----
+					// ---- STAGE 3: verify. A WRONG PASSWORD on a real account is
+					// FATAL: reply with librtmp's `?reason=authfailed` error and
+					// close — librtmp gives up the dance (no retry) and OBS shows
+					// an authentication error instead of looping. An UNKNOWN
+					// username is tolerated (authed=false): no-auth events accept
+					// any non-empty placeholder login; per-event enforcement then
+					// happens at publish via the policy check. ----
 					user := qs["user"]
-					allow := app.verify(user, qs["opaque"], qs["challenge"], qs["response"])
-					if allow {
+					v := app.verify(user, qs["opaque"], qs["challenge"], qs["response"])
+					if v.Allow {
 						authed = true
 						authedUser = user
-					}
-					sendConnectResult(cw, txn)
-					log.Printf("%s [stage3] user=%s verify=%v (accepted; authed=%v)", remote, user, allow, allow)
-					if !allow {
-						log.Printf("%s --> connect success (UNVERIFIED credentials — auth-required events will reject at publish)", remote)
+						sendConnectResult(cw, txn)
+						log.Printf("%s [stage3] user=%s verify=true → connect success (authed)", remote, user)
+					} else if v.Known {
+						log.Printf("%s [stage3] user=%s verify=false (known user, wrong password) → refusing connection", remote, user)
+						_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdError(txn, "?reason=authfailed&authmod=adobe&user="+user)})
+						return
 					} else {
-						log.Printf("%s --> connect success (authed as %s)", remote, user)
+						sendConnectResult(cw, txn)
+						log.Printf("%s [stage3] user=%s verify=false (unknown user — placeholder creds, accepted unauthenticated)", remote, user)
 					}
 
 				} else if _, ok := qs["authmod"]; ok {
@@ -163,8 +167,10 @@ func handleOBS(conn net.Conn, app *appClient) {
 				//   - credless connection    → a stable name from the client IP
 				//   - explicit <name>?token= → honored (still impersonation-checked
 				//     on auth events)
-				// Non-publish-key tokens (per-student keys, per-event publish
-				// tokens) are relayed VERBATIM — SRS handles those paths itself.
+				// Every rejection below uses NetStream.Publish.BadName — OBS
+				// treats a publish-time "invalid stream" as TERMINAL (it stops
+				// instead of auto-retrying), which is what we want for wrong
+				// keys, closed windows, kicked streams and missing auth alike.
 				explicit := name
 				if i := strings.Index(name, "?"); i >= 0 {
 					explicit = name[:i]
@@ -175,46 +181,67 @@ func handleOBS(conn net.Conn, app *appClient) {
 					explicit = ""
 				}
 
-				if pol := app.policy(token); pol.PublishKey {
-					// Closed/archived event: reject with BadName — OBS treats a
-					// publish-time "invalid stream" as terminal and STOPS, rather
-					// than auto-retrying forever against a silently-closing SRS.
-					if !pol.WindowOpen {
-						log.Printf("%s publish '%s' rejected: event window closed", remote, name)
+				// Candidate stream name BEFORE the policy call: the kick ban is
+				// keyed by the synthesized (safeStreamName'd) name, so policy
+				// needs the same form.
+				candidate := explicit
+				if candidate == "" {
+					if authed {
+						candidate = authedUser
+					} else {
+						candidate = ipStreamName(remote)
+					}
+				}
+				candidate = safeStreamName(candidate)
+				pol := app.policy(token, candidate)
+				if !pol.PublishKey {
+					// Unknown token = wrong event key. The per-student/per-token
+					// verbatim-relay paths are gone from the product, so refuse
+					// immediately (auth-error form) instead of relaying into a
+					// silent SRS rejection and an OBS connect-drop loop.
+					log.Printf("%s publish '%s' rejected: unknown event key", remote, name)
+					_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
+						"NetStream.Publish.BadName",
+						"Authentication failed: unknown event key. Check the stream key (the event key shown on your guide page).")})
+					return
+				}
+				if pol.Banned {
+					log.Printf("%s publish '%s' rejected: stream was kicked by an admin", remote, name)
+					_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
+						"NetStream.Publish.BadName",
+						"Authentication failed: you were disconnected by the organizer.")})
+					return
+				}
+				if !pol.WindowOpen {
+					log.Printf("%s publish '%s' rejected: event window closed", remote, name)
+					_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
+						"NetStream.Publish.BadName",
+						"Authentication failed: this event's streaming window is closed (not started or already ended).")})
+					return
+				}
+				final := candidate // already safeStreamName'd above
+				if pol.RequireAccountAuth {
+					if !authed {
+						log.Printf("%s publish '%s' rejected: event requires account auth", remote, name)
 						_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
 							"NetStream.Publish.BadName",
-							"This event's streaming window is closed (not started or already ended).")})
+							"Authentication failed: this event requires your account email and password in OBS' 'Use authentication' fields.")})
 						return
 					}
-					final := explicit
-					if pol.RequireAccountAuth {
-						if !authed {
-							log.Printf("%s publish '%s' rejected: event requires account auth", remote, name)
-							_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
-								"NetStream.Publish.BadName",
-								"This event requires account authentication: enable 'Use authentication' in OBS and enter your account email and password.")})
-							return
-						}
-						if explicit != "" && !strings.EqualFold(authedUser, explicit) {
-							log.Printf("%s publish '%s' rejected: authed as %s, stream name is %s", remote, name, authedUser, explicit)
-							_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
-								"NetStream.Publish.BadName",
-								"Stream name must be your own account email ("+authedUser+").")})
-							return
-						}
-						if final == "" {
-							final = authedUser
-						}
-					} else if final == "" {
-						final = ipStreamName(remote)
+					if explicit != "" && !strings.EqualFold(authedUser, explicit) {
+						log.Printf("%s publish '%s' rejected: authed as %s, stream name is %s", remote, name, authedUser, explicit)
+						_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
+							"NetStream.Publish.BadName",
+							"Authentication failed: stream name must be your own account email ("+authedUser+").")})
+						return
 					}
-					if final == "" {
-						final = "anon-" + randHex(4)
-					}
-					rewritten := final + "?token=" + token
-					log.Printf("%s publish key '%s' → stream '%s'", remote, token, rewritten)
-					name = rewritten
 				}
+				if final == "" {
+					final = "anon-" + randHex(4)
+				}
+				rewritten := safeStreamName(final) + "?token=" + token
+				log.Printf("%s publish key '%s' → stream '%s'", remote, token, rewritten)
+				name = rewritten
 				u, err := dialUpstream(cfgSRSAddr)
 				if err != nil {
 					log.Printf("%s upstream dial failed: %v", remote, err)
@@ -309,6 +336,26 @@ func ipStreamName(remote string) string {
 			b.WriteRune(r)
 		default:
 			b.WriteByte('-')
+		}
+	}
+	return b.String()
+}
+
+// safeStreamName makes a synthesized stream name safe for EVERY downstream
+// consumer. ffmpeg/ffprobe's RTMP URL parser treats '@' as the
+// user:password@host separator, so an email-derived name like
+// "hnrobert@qq.com" hangs its pull (recorder + compliance probe both die);
+// URL-encoding does not help. Replacing characters outside [A-Za-z0-9._-]
+// with '_' keeps names unique, readable, and valid in RTMP paths, HTTP-FLV
+// URLs, and filenames alike.
+func safeStreamName(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '.', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
 		}
 	}
 	return b.String()

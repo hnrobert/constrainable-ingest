@@ -144,34 +144,6 @@ func danceAuth(t *testing.T, addr, user, password string) (net.Conn, *chunkWrite
 	return c, cw, cr
 }
 
-// danceWrongPasswordOpen runs the full dance with a WRONG password; the gateway
-// accepts stage 3 GRACEFULLY (unauthenticated), so the returned connection is
-// open and usable up to publish.
-func danceWrongPasswordOpen(t *testing.T, addr, user, wrongPassword string) (net.Conn, *chunkWriter, *chunkReader) {
-	t.Helper()
-	c, cw, cr := openClient(t, addr)
-	sendConnect(cw, "live")
-	cmdField(cr) // stage1 demand
-	c.Close()
-
-	c, cw, cr = openClient(t, addr)
-	sendConnect(cw, "live?authmod=adobe&user="+user)
-	d2 := cmdField(cr) // salt+opaque
-	c.Close()
-	salt := kv(d2, "salt")
-	opaque := kv(d2, "opaque")
-	challenge := randB64(8)
-	salted2 := b64(md5raw(user + salt + wrongPassword))
-	response := b64(md5raw(salted2 + opaque + challenge))
-	c, cw, cr = openClient(t, addr)
-	sendConnect(cw, "live?authmod=adobe&user="+user+"&challenge="+challenge+"&response="+response+"&opaque="+opaque)
-	if got := cmdField(cr); !strings.Contains(got, "NetConnection.Connect.Success") {
-		c.Close()
-		t.Fatalf("wrong-pw stage3: expected graceful Connect.Success, got %q", got)
-	}
-	return c, cw, cr
-}
-
 // credlessConnect mimics a client with NO credentials configured: conn1 gets the
 // authmod demand, conn2 answers with an EMPTY user and must be accepted openly
 // (the single-URL escape hatch for requireAccountAuth-off events).
@@ -225,15 +197,38 @@ func TestAuthmodSuccessAndFailure(t *testing.T) {
 	c, _, cr := danceAuth(t, addr, user, password)
 	defer c.Close()
 	_ = cr
-	// wrong password: stage 3 is GRACEFUL — connect still succeeds (the
-	// rejection happens later, at publish, for auth-requiring events)
-	c2, cw2, cr2 := openClient(t, addr)
-	defer c2.Close()
-	_ = cw2
-	if got := danceWrongPassword(t, addr, user, "wrongpw", salt); !strings.Contains(got, "NetConnection.Connect.Success") {
-		t.Fatalf("wrong password: expected GRACEFUL Connect.Success, got %q", got)
+	// WRONG password on a KNOWN account is now FATAL: librtmp's authfailed
+	// error, connection refused outright (no connect-then-loop)
+	if got := danceWrongPassword(t, addr, user, "wrongpw", salt); !strings.Contains(got, "reason=authfailed") {
+		t.Fatalf("wrong password: expected fatal authfailed error, got %q", got)
 	}
-	_ = cr2
+}
+
+// danceUnknownUser runs the dance with an unregistered username — the gateway
+// must accept it (placeholder credentials for no-auth events), unauthenticated.
+func danceUnknownUser(t *testing.T, addr, user string) (net.Conn, *chunkWriter, *chunkReader) {
+	t.Helper()
+	c, cw, cr := openClient(t, addr)
+	sendConnect(cw, "live")
+	cmdField(cr) // stage1 demand
+	c.Close()
+
+	c, cw, cr = openClient(t, addr)
+	sendConnect(cw, "live?authmod=adobe&user="+user)
+	d2 := cmdField(cr) // random salt challenge for unknown user
+	c.Close()
+	salt := kv(d2, "salt")
+	opaque := kv(d2, "opaque")
+	challenge := randB64(8)
+	salted2 := b64(md5raw(user + salt + "whatever"))
+	response := b64(md5raw(salted2 + opaque + challenge))
+	c, cw, cr = openClient(t, addr)
+	sendConnect(cw, "live?authmod=adobe&user="+user+"&challenge="+challenge+"&response="+response+"&opaque="+opaque)
+	if got := cmdField(cr); !strings.Contains(got, "NetConnection.Connect.Success") {
+		c.Close()
+		t.Fatalf("unknown user: expected accepted Connect.Success, got %q", got)
+	}
+	return c, cw, cr
 }
 
 // danceWrongPassword runs the dance with a WRONG password and returns the
@@ -284,8 +279,10 @@ func mockAppMux(token, authKey, openKey, user, salt, salted2 string) *http.Serve
 		opaque := between(string(b), `"opaque":"`, `"`)
 		challenge := between(string(b), `"challenge":"`, `"`)
 		response := between(string(b), `"response":"`, `"`)
+		email := between(string(b), `"email":"`, `"`)
 		expect := b64(md5raw(salted2 + opaque + challenge))
-		_, _ = io.WriteString(w, `{"allow":`+b2s(response == expect)+`}`)
+		known := email == user && user != ""
+		_, _ = io.WriteString(w, `{"allow":`+b2s(known && response == expect)+`,"known":`+b2s(known)+`}`)
 	})
 	mux.HandleFunc("/api/srs/rtmp-auth/policy", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-rtmp-auth") != token {
@@ -293,11 +290,13 @@ func mockAppMux(token, authKey, openKey, user, salt, salted2 string) *http.Serve
 			return
 		}
 		tok := r.URL.Query().Get("token")
+		stream := r.URL.Query().Get("stream")
 		const closedKey = "closedkey1" // publish key whose event window is shut
 		isKey := (tok == authKey && authKey != "") || (tok == openKey && openKey != "") || tok == closedKey
 		require := isKey && tok == authKey
 		open := tok != closedKey
-		_, _ = io.WriteString(w, `{"publishKey":`+b2s(isKey)+`,"requireAccountAuth":`+b2s(require)+`,"windowOpen":`+b2s(open)+`}`)
+		banned := stream == "banned_example.com"
+		_, _ = io.WriteString(w, `{"publishKey":`+b2s(isKey)+`,"requireAccountAuth":`+b2s(require)+`,"windowOpen":`+b2s(open)+`,"banned":`+b2s(banned)+`}`)
 	})
 	return mux
 }
@@ -464,20 +463,10 @@ func TestPublishPolicyEnforcement(t *testing.T) {
 	c.Close()
 	_ = cr
 
-	// 1b) WRONG-password dance (gracefully accepted, unauthed) + auth key →
-	// still rejected at publish — the policy is the enforcement point
-	c, cw, cr = danceWrongPasswordOpen(t, addr, user, "wrongpw")
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish(authKey)})
-	if got := cmdField(cr); !strings.Contains(got, "NetStream.Publish.BadName") {
-		c.Close()
-		t.Fatalf("auth key, wrong-pw conn: expected BadName rejection, got %q", got)
-	}
-	c.Close()
-
 	// 2) authed publisher + bare auth key → upstream name = the authed email
 	c, cw, cr = danceAuth(t, addr, user, password)
 	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish(authKey)})
-	expectName(t, names, user+"?token="+authKey)
+	expectName(t, names, "robert_example.com?token="+authKey)
 	c.Close()
 
 	// 3) authed publisher under ANOTHER user's explicit name → rejected
@@ -501,10 +490,28 @@ func TestPublishPolicyEnforcement(t *testing.T) {
 	expectName(t, names, "alice?token="+openKey)
 	c.Close()
 
-	// 6) unknown token (per-student key) → relayed VERBATIM, no rewriting
+	// 6) unknown token (wrong event key) → immediate BadName, nothing relayed
 	c, cw, cr = credlessConnect(t, addr)
 	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish("studentkey0001")})
-	expectName(t, names, "studentkey0001")
+	if got := cmdField(cr); !strings.Contains(got, "unknown event key") {
+		c.Close()
+		t.Fatalf("unknown token: expected unknown-event-key BadName, got %q", got)
+	}
+	c.Close()
+
+	// 7) banned stream name (recently kicked) → BadName, nothing relayed
+	c, cw, cr = danceAuth(t, addr, user, password)
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish("banned@example.com?token=" + openKey)})
+	if got := cmdField(cr); !strings.Contains(got, "disconnected by the organizer") {
+		c.Close()
+		t.Fatalf("banned stream: expected kick BadName, got %q", got)
+	}
+	c.Close()
+
+	// 8) unknown-user (placeholder creds) + no-auth key → accepted, ip-name stream
+	c, cw, cr = danceUnknownUser(t, addr, "placeholder@nowhere.dev")
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish(openKey)})
+	expectName(t, names, "ip-127.0.0.1?token="+openKey)
 	c.Close()
 	_ = cr
 }

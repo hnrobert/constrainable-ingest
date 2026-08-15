@@ -15,12 +15,14 @@
 import { createError, getHeader, getQuery } from 'h3'
 import { env } from '../../../utils/env'
 import { EventsRepository } from '../../../repositories/events.repository'
+import { isKickBanned } from '../../../services/kick-bans'
 
 export default defineEventHandler((event) => {
   if (getHeader(event, 'x-rtmp-auth') !== env.rtmpAuthToken) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
   const token = String(getQuery(event).token ?? '')
+  const stream = String(getQuery(event).stream ?? '').trim()
   const row = token ? EventsRepository.findByPublishKey(token) : undefined
   const now = Date.now()
   const windowOpen =
@@ -33,5 +35,6 @@ export default defineEventHandler((event) => {
     publishKey: !!row,
     requireAccountAuth: row?.requireAccountAuth ?? false,
     windowOpen: row?.status === 'archived' ? false : windowOpen,
+    banned: !!stream && isKickBanned(stream),
   }
 })

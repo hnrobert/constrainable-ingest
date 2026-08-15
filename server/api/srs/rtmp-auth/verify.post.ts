@@ -24,7 +24,10 @@ export default defineEventHandler(async (event) => {
   const email = String(body?.email ?? '').trim().toLowerCase()
   const user = email ? UsersRepository.findByEmail(email) : undefined
   if (!user?.authmodVerifier) {
-    return { allow: false }
+    // Unknown username: `known: false` lets the gateway treat this as placeholder
+    // credentials (no-auth events accept any non-empty login) instead of a hard
+    // auth failure. No enumeration: same shape as the known-user path.
+    return { allow: false, known: false }
   }
   const ok = verifyResponse({
     storedVerifier: verifierFromCipher(user.authmodVerifier),
@@ -32,5 +35,7 @@ export default defineEventHandler(async (event) => {
     challenge: String(body?.challenge ?? ''),
     response: String(body?.response ?? ''),
   })
-  return { allow: ok }
+  // known + !allow = a REAL account with the WRONG password → the gateway
+  // refuses the connection outright (librtmp-fatal `authfailed`).
+  return { allow: ok, known: true }
 })

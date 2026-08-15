@@ -56,9 +56,18 @@ func (a *appClient) salt(email string) string {
 	return body.Salt
 }
 
-// verify asks the app to check the Adobe authmod response (stage 3). Returns
-// false on any error so a misbehaving app fails closed.
-func (a *appClient) verify(email, opaque, challenge, response string) bool {
+// verifyResult distinguishes a WRONG PASSWORD on a real account (fatal) from
+// an UNKNOWN USERNAME (placeholder credentials — tolerated so no-auth events
+// keep working with any non-empty login).
+type verifyResult struct {
+	Allow bool
+	Known bool
+}
+
+// verify asks the app to check the Adobe authmod response (stage 3). Fails
+// closed (Allow=false, Known=false) on any error so a misbehaving app never
+// authenticates anyone.
+func (a *appClient) verify(email, opaque, challenge, response string) verifyResult {
 	reqBody := struct {
 		Email     string `json:"email"`
 		Opaque    string `json:"opaque"`
@@ -68,25 +77,26 @@ func (a *appClient) verify(email, opaque, challenge, response string) bool {
 	raw, _ := json.Marshal(reqBody)
 	req, err := http.NewRequest(http.MethodPost, a.base+"/api/srs/rtmp-auth/verify", strings.NewReader(string(raw)))
 	if err != nil {
-		return false
+		return verifyResult{}
 	}
 	req.Header.Set("x-rtmp-auth", a.token)
 	req.Header.Set("content-type", "application/json")
 	resp, err := a.hc.Do(req)
 	if err != nil {
-		return false
+		return verifyResult{}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return false
+		return verifyResult{}
 	}
 	var out struct {
 		Allow bool `json:"allow"`
+		Known bool `json:"known"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return false
+		return verifyResult{}
 	}
-	return out.Allow
+	return verifyResult{Allow: out.Allow, Known: out.Known}
 }
 
 // policyResult is the app's answer for one stream-key token.
@@ -101,17 +111,21 @@ type policyResult struct {
 	// gateway rejects the publish with NetStream.Publish.BadName, which OBS
 	// treats as a terminal invalid-stream (it stops instead of retry-looping).
 	WindowOpen bool `json:"windowOpen"`
+	// Banned: this stream name was recently kicked by an admin — reject the
+	// automatic reconnect the same terminal way so a kick actually sticks.
+	Banned bool `json:"banned"`
 }
 
 // policy asks the app how to treat a publish token. Called at PUBLISH time —
 // the earliest moment the stream key (hence the event) is known. Fails open
 // (zero value): SRS' own on_publish hook still validates the key against the
 // same app, so an app outage already blocks publishing there.
-func (a *appClient) policy(token string) policyResult {
+func (a *appClient) policy(token, stream string) policyResult {
 	if token == "" {
 		return policyResult{}
 	}
-	u := a.base + "/api/srs/rtmp-auth/policy?token=" + url.QueryEscape(token)
+	u := a.base + "/api/srs/rtmp-auth/policy?token=" + url.QueryEscape(token) +
+		"&stream=" + url.QueryEscape(stream)
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
 		return policyResult{}
