@@ -2,7 +2,11 @@
 import type { SessionSnapshot, SessionStatus } from '#shared/events'
 import type { DataTableColumn } from '~/components/DataTable.vue'
 
-const props = defineProps<{ sessions: SessionSnapshot[] }>()
+const props = defineProps<{
+  sessions: SessionSnapshot[]
+  /** eventId → display label (event name), for the Event column */
+  eventLabels: Record<number, string>
+}>()
 const emit = defineEmits<{ watch: [streamName: string] }>()
 
 const toast = useToast()
@@ -60,14 +64,13 @@ function fmtTime(ms: number): string {
 }
 
 const columns: DataTableColumn[] = [
-  { key: 'streamName', header: 'Stream name', class: 'font-medium' },
-  { key: 'status', header: 'Status' },
+  { key: 'event', header: 'Event' },
+  { key: 'streamName', header: 'User', class: 'font-medium' },
   { key: 'resolution', header: 'Resolution' },
   { key: 'fps', header: 'Framerate' },
-  { key: 'bitrateKbps', header: 'Bitrate' },
-  { key: 'compliant', header: 'Compliant' },
+  { key: 'status', header: 'Status' },
   { key: 'startedAt', header: 'Started', class: 'text-muted-foreground' },
-  { key: 'actions', header: '', headClass: 'w-0' },
+  { key: 'actions', header: 'Action', headClass: 'w-0' },
 ]
 </script>
 
@@ -81,13 +84,9 @@ const columns: DataTableColumn[] = [
     <template #cell-status="{ row }">
       <Badge :variant="statusVariant[row.status]">{{ statusLabel[row.status] }}</Badge>
     </template>
+    <template #cell-event="{ row }">{{ props.eventLabels[row.eventId ?? -1] ?? '—' }}</template>
     <template #cell-resolution="{ row }">{{ resolution(row) }}</template>
     <template #cell-fps="{ row }">{{ row.fps != null ? row.fps.toFixed(2) : '—' }}</template>
-    <template #cell-bitrateKbps="{ row }">{{ row.bitrateKbps != null ? `${row.bitrateKbps} kbps` : '—' }}</template>
-    <template #cell-compliant="{ row }">
-      <Badge v-if="row.compliant" variant="success">✓</Badge>
-      <span v-else class="text-muted-foreground">—</span>
-    </template>
     <template #cell-startedAt="{ row }">{{ fmtTime(row.startedAt) }}</template>
     <template #cell-actions="{ row }">
       <div class="flex justify-end gap-1.5">
