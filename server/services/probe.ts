@@ -5,7 +5,7 @@
 import { env } from '../utils/env'
 import { getConfig } from '../utils/config-store'
 import { readStream, sleep } from '../utils/process'
-import { buildRtmpUrl } from '../utils/srs-url'
+import { buildFlvPullUrl } from '../utils/srs-url'
 
 export interface ProbeResult {
   width: number
@@ -33,6 +33,13 @@ async function probeOnce(target: string, timeoutMs: number): Promise<ProbeResult
     env.ffprobePath,
     '-v',
     'error',
+    // Default analysis budgets hang for many seconds on low-frame-rate live
+    // streams (1 FPS): codec info sits in the first keyframe + sequence
+    // headers, so a tiny probesize/analyzeduration answers instantly.
+    '-probesize',
+    '65536',
+    '-analyzeduration',
+    '2000000',
     '-select_streams',
     'v:0',
     '-show_entries',
@@ -87,5 +94,5 @@ export async function probeStream(rtmpUrl: string): Promise<ProbeResult | null> 
 
 /** Convenience: build the RTMP pull URL and probe in one call. */
 export function probeAppStream(app: string, stream: string, vhost?: string): Promise<ProbeResult | null> {
-  return probeStream(buildRtmpUrl(app, stream, vhost))
+  return probeStream(buildFlvPullUrl(stream))
 }

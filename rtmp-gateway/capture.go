@@ -94,7 +94,7 @@ func handleCapture(conn net.Conn) {
 		}
 		if cmd == "connect" {
 			// Acknowledge connect minimally so OBS proceeds to publish (NO challenge).
-			_ = cw.WriteMessage(&Message{Type: 5, CSID: 2, Payload: putBe4(2500000)})            // window ack size
+			_ = cw.WriteMessage(&Message{Type: 5, CSID: 2, Payload: putBe4(2500000)})               // window ack size
 			_ = cw.WriteMessage(&Message{Type: 6, CSID: 2, Payload: append(putBe4(2500000), 0x02)}) // peer bandwidth (dynamic)
 			_ = cw.WriteMessage(&Message{Type: 4, CSID: 2, Payload: []byte{0, 0, 0, 0, 0, 0}})      // StreamBegin msid 0
 			_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdConnectOK(txn)})

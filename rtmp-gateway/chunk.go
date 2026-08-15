@@ -21,9 +21,12 @@ type Message struct {
 
 type chunkState struct {
 	ts, mlen uint32
-	mtype    byte
-	msid     uint32
-	buf      []byte
+	// delta is the timestamp delta of the last message on this chunk stream;
+	// per the RTMP spec a fmt-3 header opening a NEW message reuses it (not 0).
+	delta uint32
+	mtype byte
+	msid  uint32
+	buf   []byte
 }
 
 // ---- byte helpers ----
@@ -116,6 +119,9 @@ func (cr *chunkReader) ReadMessage() (*Message, error) {
 				ts = be32(ext)
 			}
 			st.ts, st.mlen, st.mtype, st.msid, st.buf = ts, mlen, mtype, msid, st.buf[:0]
+			// fmt-0's own timestamp doubles as the baseline delta for any
+			// following fmt-3-opened messages on this chunk stream.
+			st.delta = ts
 		case 1:
 			hdr, err := readN(cr.r, 7)
 			if err != nil {
@@ -132,6 +138,7 @@ func (cr *chunkReader) ReadMessage() (*Message, error) {
 				d = be32(ext)
 			}
 			st.ts += d
+			st.delta = d
 			st.mlen, st.mtype = mlen, mtype
 		case 2:
 			hdr, err := readN(cr.r, 3)
@@ -147,8 +154,16 @@ func (cr *chunkReader) ReadMessage() (*Message, error) {
 				d = be32(ext)
 			}
 			st.ts += d
+			st.delta = d
 		case 3:
-			// continuation — no header bytes follow.
+			// fmt-3 opens either a CONTINUATION chunk of the in-flight message
+			// (no ts change) or a NEW message — which per spec advances by the
+			// LAST delta, not 0. Treating it as 0 froze/regressed timestamps and
+			// made SRS reject the relayed stream ("Queue input is backward in
+			// time"), starving every RTMP pull (compliance probe, recordings).
+			if len(st.buf) == 0 {
+				st.ts += st.delta
+			}
 		}
 
 		need := int(st.mlen) - len(st.buf)

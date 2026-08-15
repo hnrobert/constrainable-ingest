@@ -1,11 +1,18 @@
 import { env } from './env'
 
 /**
- * The server-to-SRS pull address (recorder ffmpeg, monitor ffprobe). Path
- * components use encodeURI, NOT encodeURIComponent: `@` is legal in RTMP path
- * segments and ffmpeg treats URLs literally — `gwtest%40example.com` pulls a
- * nonexistent stream, so email stream names must stay verbatim.
+ * The server-to-SRS pull address for the recorder and the monitor probe, as an
+ * HTTP-FLV URL. RTMP pulls are NOT used: SRS's RTMP-play consumer starves on
+ * low-frame-rate streams (its merged-write queue stops delivering for ~1fps
+ * content), while the HTTP-FLV path serves the same stream fine — verified
+ * against live 1fps pushes on both paths. `@` etc. are already sanitized out of
+ * stream names by the gateway, and encodeURI keeps the path literal for ffmpeg.
  */
+export function buildFlvPullUrl(stream: string): string {
+  return `${env.srsFlvBase}/live/${encodeURI(stream)}.flv`
+}
+
+/** Legacy RTMP pull address (kept for tooling that must speak RTMP). */
 export function buildRtmpUrl(app: string, stream: string, vhost?: string): string {
   let url = `rtmp://${env.srsRtmpHost}/${encodeURI(app)}/${encodeURI(stream)}`
   if (vhost && vhost !== '__defaultVhost__') {

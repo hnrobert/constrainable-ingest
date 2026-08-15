@@ -12,7 +12,7 @@ import { join, relative } from 'node:path'
 import { env } from '../utils/env'
 import { getConfig } from '../utils/config-store'
 import { safeName } from '../utils/filename'
-import { buildRtmpUrl } from '../utils/srs-url'
+import { buildFlvPullUrl } from '../utils/srs-url'
 import { awaitExitOrKill, quitFfmpeg, readStream, type AnyProc } from '../utils/process'
 import { RecordingsRepository } from '../repositories/recordings.repository'
 import { emit } from '../utils/bus'
@@ -56,7 +56,9 @@ export function startRecording(
     '-v',
     'error',
     '-i',
-    buildRtmpUrl(app, streamName, vhost),
+    // HTTP-FLV pull: SRS's RTMP-play path starves on low-fps streams (see
+    // srs-url.ts); the FLV path serves the same stream reliably.
+    buildFlvPullUrl(streamName),
     '-c',
     'copy',
     '-f',

@@ -17,7 +17,7 @@ import { EventsRepository } from '../repositories/events.repository'
 import { getConfig, getLimitsFor } from '../utils/config-store'
 import { AsyncSemaphore } from '../utils/semaphore'
 import { sleep } from '../utils/process'
-import { buildRtmpUrl } from '../utils/srs-url'
+import { buildFlvPullUrl } from '../utils/srs-url'
 import { probeStream, type ProbeResult } from './probe'
 import * as recorder from './recorder'
 import { killClient } from './srs-client'
@@ -205,8 +205,8 @@ async function monitorSession(s: ActiveSession, studentLabel: string | null): Pr
   while (s.active) {
     const cfg = getConfig()
     const limits = getLimitsFor(event)
-    const rtmpUrl = buildRtmpUrl(s.app, s.streamName, s.vhost)
-    const result = await probeSemaphore.run(() => probeStream(rtmpUrl))
+    const pullUrl = buildFlvPullUrl(s.streamName)
+    const result = await probeSemaphore.run(() => probeStream(pullUrl))
     if (!s.active) break
 
     if (result) {

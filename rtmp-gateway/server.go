@@ -11,11 +11,11 @@
 // at publish. So EVERYONE keeps "Use authentication" ON in OBS (auth events:
 // real account credentials; no-auth events: anything, e.g. live/live), and:
 //
-//   conn 1 (plain connect)       → _error "authmod=adobe&code=403 need auth"
-//   conn 2 ?authmod=adobe&user=U → _error "?reason=needauth&salt=S&opaque=O"
-//   conn 3 ?...&response=R       → verify via app → _result EITHER WAY (graceful):
-//                                  match → authed=true + authedUser; miss/unknown
-//                                  → authed=false, connection still accepted
+//	conn 1 (plain connect)       → _error "authmod=adobe&code=403 need auth"
+//	conn 2 ?authmod=adobe&user=U → _error "?reason=needauth&salt=S&opaque=O"
+//	conn 3 ?...&response=R       → verify via app → _result EITHER WAY (graceful):
+//	                               match → authed=true + authedUser; miss/unknown
+//	                               → authed=false, connection still accepted
 //
 // Enforcement at PUBLISH (the only point the stream key — hence the event — is
 // known): the gateway asks the app (GET /policy) whether the key's event

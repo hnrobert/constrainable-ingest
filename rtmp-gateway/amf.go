@@ -16,7 +16,7 @@ type amfReader struct {
 	i int
 }
 
-func (r *amfReader) u8() byte  { v := r.b[r.i]; r.i++; return v }
+func (r *amfReader) u8() byte    { v := r.b[r.i]; r.i++; return v }
 func (r *amfReader) u16() uint16 { v := binary.BigEndian.Uint16(r.b[r.i:]); r.i += 2; return v }
 func (r *amfReader) u32() uint32 { v := binary.BigEndian.Uint32(r.b[r.i:]); r.i += 4; return v }
 func (r *amfReader) f64() float64 {
