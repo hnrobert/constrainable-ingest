@@ -95,6 +95,21 @@ export const events = sqliteTable(
   ],
 )
 
+/* ---------------------------- event_slug_aliases --------------------------- */
+/**
+ * Renamed-event redirects: when an event's key (slug) changes, the old key
+ * 301s visitors to the new one — until a NEW event claims the old key, at
+ * which point the alias is dropped (the old key serves the new event).
+ */
+export const eventSlugAliases = sqliteTable('event_slug_aliases', {
+  /** the retired key a visitor may still use */
+  oldSlug: text('old_slug').primaryKey(),
+  eventId: integer('event_id')
+    .notNull()
+    .references(() => events.id, { onDelete: 'cascade' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(now),
+})
+
 /* -------------------------------- students -------------------------------- */
 export const students = sqliteTable(
   'students',
@@ -322,6 +337,8 @@ export const inviteLinks = sqliteTable(
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type Event = typeof events.$inferSelect
+export type EventSlugAlias = typeof eventSlugAliases.$inferSelect
+export type NewEventSlugAlias = typeof eventSlugAliases.$inferInsert
 export type NewEvent = typeof events.$inferInsert
 export type Student = typeof students.$inferSelect
 export type NewStudent = typeof students.$inferInsert

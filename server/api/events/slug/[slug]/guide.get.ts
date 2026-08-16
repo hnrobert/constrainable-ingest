@@ -1,5 +1,8 @@
 /**
- * Participant push-streaming guide for one event, keyed by slug. Public surface
+ * Participant push-streaming guide for one event, keyed by slug. Retired keys
+ * (the event was renamed) redirect: the response carries `redirectTo` so the
+ * page swaps to the new key's URL. A retired key stops redirecting the moment
+ * a new event claims it. Public surface
  * (allowlisted) but visibility-gated: public events need no session; registered
  * needs any login; groups needs membership. Draft/archived events 404 (no
  * existence leak). The payload is identical for every viewer of the same event:
@@ -8,6 +11,7 @@
  */
 import { createError } from 'h3'
 import { EventsRepository } from '../../../../repositories/events.repository'
+import { EventSlugAliasesRepository } from '../../../../repositories/event-slug-aliases.repository'
 import { GroupsRepository } from '../../../../repositories/groups.repository'
 import { canViewEvent } from '../../../../services/groups'
 import { getLimitsFor } from '../../../../utils/config-store'
@@ -17,8 +21,20 @@ export default defineEventHandler((event) => {
   const slug = getRouterParam(event, 'slug')
   if (!slug) throw createError({ statusCode: 400, statusMessage: 'missing slug' })
 
-  const row = EventsRepository.findBySlug(slug)
-  // Missing / draft / archived → 404 (don't leak that the event exists).
+  let row = EventsRepository.findBySlug(slug)
+  let redirectTo: string | null = null
+  if (!row) {
+    // Retired key? Serve the renamed event's guide with a redirect marker.
+    const alias = EventSlugAliasesRepository.findByOldSlug(slug)
+    if (alias) {
+      const target = EventsRepository.findById(alias.eventId)
+      if (target && target.slug !== slug) {
+        row = target
+        redirectTo = target.slug
+      }
+    }
+  }
+  // Still missing / draft / archived → 404 (don't leak that the event exists).
   if (!row || row.status === 'draft' || row.status === 'archived') {
     throw createError({ statusCode: 404, statusMessage: 'event not found' })
   }
@@ -39,6 +55,7 @@ export default defineEventHandler((event) => {
   const server = `rtmp://${hostPort}/live`
 
   return {
+    redirectTo,
     name: row.name,
     slug: row.slug,
     server,
@@ -48,5 +65,5 @@ export default defineEventHandler((event) => {
     endsAt: row.endsAt ? row.endsAt.getTime() : null,
     requireAccountAuth: row.requireAccountAuth,
     streamGuide: row.streamGuide ?? null,
-  } satisfies EventGuide
+  } satisfies EventGuide & { redirectTo: string | null }
 })

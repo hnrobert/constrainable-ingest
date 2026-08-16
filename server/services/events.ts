@@ -6,6 +6,7 @@
  */
 import { createError } from 'h3'
 import { EventsRepository } from '../repositories/events.repository'
+import { EventSlugAliasesRepository } from '../repositories/event-slug-aliases.repository'
 import { GroupsRepository } from '../repositories/groups.repository'
 import type { Event } from '../database/schema'
 import { limitsOverrideSchema, type LimitsOverride } from '#shared/config'
@@ -151,6 +152,8 @@ export function createEvent(input: EventInput): EventView {
   })
 
   if (input.groupIds) GroupsRepository.setEventGroups(row.id, input.groupIds)
+  // the new event now owns this key outright — retire any alias to it
+  EventSlugAliasesRepository.remove(slug)
 
   audit('info', 'admin', `event created: ${name}`, {
     eventId: row.id,
@@ -175,6 +178,10 @@ export function updateEvent(id: number, patch: EventInput): EventView {
       set.slug = slug
       // the event key IS the stream key — keep the publish key in lockstep
       set.publishKey = slug
+      // the retired key keeps working: redirect old → new until someone else
+      // claims the old key with a new event
+      EventSlugAliasesRepository.set(existing.slug, id)
+      EventSlugAliasesRepository.remove(slug)
     }
   }
   if (patch.description !== undefined) set.description = patch.description
@@ -200,6 +207,7 @@ export function updateEvent(id: number, patch: EventInput): EventView {
 
 export function deleteEvent(id: number): void {
   const existing = getRow(id)
+  EventSlugAliasesRepository.removeByEvent(id)
   EventsRepository.remove(id)
   audit('warn', 'admin', `event deleted: ${existing.name}`, { eventId: id })
 }

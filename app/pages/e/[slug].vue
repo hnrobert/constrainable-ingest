@@ -27,6 +27,16 @@ const statusCode = computed(
 const notFound = computed(() => statusCode.value === 404)
 const unauthorized = computed(() => statusCode.value === 403)
 
+// Retired key (event renamed) → swap the URL to the event's current key.
+// The alias dies server-side once a new event claims this key.
+watch(
+  () => (guide.value as { redirectTo?: string | null } | null)?.redirectTo,
+  (to) => {
+    if (to) navigateTo(`/e/${to}`, { replace: true })
+  },
+  { immediate: true },
+)
+
 const publishKey = computed(() => guide.value?.publishKey ?? null)
 const email = computed(() => user.value?.email ?? null)
 

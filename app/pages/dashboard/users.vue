@@ -91,24 +91,6 @@ function discardAndLeave(): void {
   proceed()
 }
 
-function toggleRole(u: UserWithGroupsView): void {
-  const next = u.role === 'admin' ? 'user' : 'admin'
-  const apply = async () => {
-    try {
-      await $fetch(`/api/users/${u.id}`, { method: 'PATCH', body: { role: next } })
-      toast.success(`${u.email} is now ${next}`)
-      await refresh()
-    } catch (e: any) {
-      toast.error('Role change failed: ' + (e?.data?.statusMessage || e?.message || ''))
-    }
-  }
-  if (next === 'admin') {
-    confirm.ask(`Promote ${u.email} to admin?`, apply, { actionLabel: 'Promote' })
-  } else {
-    apply()
-  }
-}
-
 const columns: DataTableColumn[] = [
   { key: 'email', header: 'Email', class: 'font-medium' },
   { key: 'role', header: 'Role' },
@@ -145,7 +127,6 @@ const columns: DataTableColumn[] = [
                   <SelectItem value="admin">admin</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="link" class="h-auto p-0 text-xs" :disabled="saving" @click="toggleRole(row)">flip</Button>
             </div>
           </template>
           <template #cell-groups="{ row }">

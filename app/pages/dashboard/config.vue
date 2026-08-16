@@ -92,12 +92,6 @@ const sections: Section[] = [
     ],
   },
   {
-    title: 'Publish Admission',
-    fields: [
-      { path: 'access.rejectUnknownPublishers', label: 'Reject unregistered publishes', kind: 'bool', hint: 'Off allows any streamName to publish' },
-    ],
-  },
-  {
     title: 'SRS Connection (Advanced)',
     fields: [
       { path: 'srs.apiBase', label: 'SRS HTTP API', kind: 'text' },

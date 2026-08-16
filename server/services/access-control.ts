@@ -16,15 +16,13 @@
  *      stream concurrently with one shared key.
  *
  * A stream is only allowed while inside its event's [startsAt, endsAt] window
- * (each bound enforced only when set). No key/token at all: allowed only when
- * access.rejectUnknownPublishers is false (open-access; recorded against no
- * event, so no window applies).
+ * (each bound enforced only when set). Unknown stream names / keys are always
+ * rejected — admission is not configurable.
  */
 import { StreamKeysRepository } from '../repositories/stream-keys.repository'
 import { EventsRepository } from '../repositories/events.repository'
 import { EnrollmentsRepository } from '../repositories/enrollments.repository'
 import { StudentsRepository } from '../repositories/students.repository'
-import { getConfig } from '../utils/config-store'
 import { verifyToken } from '../utils/token'
 import type { Event } from '../database/schema'
 
@@ -76,7 +74,6 @@ async function findEventByPublishToken(token: string): Promise<Event | null> {
 }
 
 export async function authorizePublish(ctx: AuthContext): Promise<AuthResult> {
-  const cfg = getConfig()
 
   const keys = StreamKeysRepository.findAllByStreamName(ctx.stream)
   const token = parseToken(ctx.param)
@@ -127,9 +124,9 @@ export async function authorizePublish(ctx: AuthContext): Promise<AuthResult> {
     if (!token) return { allow: false, reason: 'missing token' }
     return { allow: false, reason: keys.some((k) => !k.revoked) ? 'bad token' : 'key revoked' }
   }
-  return cfg.access.rejectUnknownPublishers
-    ? { allow: false, reason: 'unknown stream name' }
-    : { allow: true, eventId: null, streamKeyId: -1, studentLabel: null }
+  // Unknown stream names are always rejected — publish admission is not
+  // configurable (the gateway requires a valid event key for everyone).
+  return { allow: false, reason: 'unknown stream name' }
 }
 
 function resolveStudentLabel(enrollmentId: number | null): string | null {

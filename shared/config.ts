@@ -44,11 +44,6 @@ const recordSchema = z.object({
   remuxTimeoutMs: z.number().int().min(1000).default(30000),
 })
 
-const accessSchema = z.object({
-  /** reject publishers whose stream name isn't tied to a valid stream key */
-  rejectUnknownPublishers: z.boolean().default(true),
-})
-
 const concurrencySchema = z.object({
   /** max concurrent ffprobe checks */
   probeMax: z.number().int().min(1).default(8),
@@ -81,7 +76,6 @@ export const appConfigSchema = z.object({
   /** what to do when a stream exceeds limits */
   enforce: z.enum(['kick', 'flag']).default('kick'),
   record: recordSchema.default(recordSchema.parse({})),
-  access: accessSchema.default(accessSchema.parse({})),
   concurrency: concurrencySchema.default(concurrencySchema.parse({})),
   registration: registrationSchema.default(registrationSchema.parse({})),
 })
