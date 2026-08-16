@@ -152,7 +152,7 @@ function discardAndLeave(): void {
       <Badge v-if="dirty" variant="warning">Unsaved changes</Badge>
     </div>
 
-    <div class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] items-start gap-4">
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] items-stretch gap-4">
       <Card>
         <CardHeader><CardTitle>Delivery Method</CardTitle></CardHeader>
         <CardContent>
@@ -177,13 +177,13 @@ function discardAndLeave(): void {
           <FieldRow label="Port">
             <Input v-model.number="form.port" type="number" />
           </FieldRow>
-          <FieldRow label="Implicit TLS (SSL)" hint="direct TLS, typically port 465">
+          <FieldRow label="Implicit TLS (SSL)" inline hint="direct TLS, typically port 465">
             <Checkbox v-model="form.useSsl" />
           </FieldRow>
-          <FieldRow label="STARTTLS" hint="upgrade to TLS, typically port 587/25">
+          <FieldRow label="STARTTLS" inline hint="upgrade to TLS, typically port 587/25">
             <Checkbox v-model="form.useTls" />
           </FieldRow>
-          <FieldRow label="Requires login authentication">
+          <FieldRow label="Requires login authentication" inline>
             <Checkbox v-model="form.usePassword" />
           </FieldRow>
           <FieldRow label="Sender email (login account)">

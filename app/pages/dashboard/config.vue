@@ -197,7 +197,7 @@ function discardAndLeave(): void {
       <Badge v-if="dirty" variant="warning">Unsaved changes</Badge>
     </div>
 
-    <div v-if="form" class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] items-start gap-4">
+    <div v-if="form" class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] items-stretch gap-4">
       <Card v-for="s in sections" :key="s.title">
         <CardHeader><CardTitle>{{ s.title }}</CardTitle></CardHeader>
         <CardContent class="space-y-3">
@@ -206,6 +206,7 @@ function discardAndLeave(): void {
             :key="f.path"
             :label="f.label"
             :hint="f.hint"
+            :inline="f.kind !== 'select' && f.kind !== 'number' && f.kind !== 'text'"
           >
             <Select
               v-if="f.kind === 'select'"
@@ -235,7 +236,7 @@ function discardAndLeave(): void {
       <Card>
         <CardHeader><CardTitle>Registration Email Restrictions</CardTitle></CardHeader>
         <CardContent class="space-y-3">
-          <FieldRow label="Enable email whitelist" hint="When enabled, only emails matching the wildcards below may register; leave empty to allow all">
+          <FieldRow label="Enable email whitelist" inline hint="When enabled, only emails matching the wildcards below may register; leave empty to allow all">
             <Checkbox v-model="form.registration.emailWhitelist.enabled" />
           </FieldRow>
           <FieldRow label="Allowed email wildcards (one per line)">
