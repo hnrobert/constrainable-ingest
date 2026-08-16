@@ -149,6 +149,7 @@ const statusVariant: Record<string, 'secondary' | 'warning' | 'success' | 'destr
             <p class="truncate font-medium">{{ s.streamName }}</p>
             <p class="text-xs text-muted-foreground">
               {{ s.width && s.height ? `${s.width}×${s.height}` : '—' }} ·
+              {{ s.bitrateKbps != null ? `${s.bitrateKbps} kbps` : '—' }} ·
               {{ new Date(s.startedAt).toLocaleTimeString('en-US', { hour12: false }) }}
             </p>
           </div>

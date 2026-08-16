@@ -103,6 +103,21 @@ const MIME: Record<string, string> = {
   '.webm': 'video/webm',
 }
 
+/** All segment paths (relative to RECORD_DIR) for a recording, chronological. */
+export function resolveSegments(id: number): string[] {
+  const row = RecordingsRepository.findById(id)
+  if (!row) throw createError({ statusCode: 404, statusMessage: 'recording not found' })
+  const segs: string[] = row.segments ? JSON.parse(row.segments) : [row.filePath]
+  return segs.filter((rel) => {
+    try {
+      statSync(join(env.recordDir, rel))
+      return true
+    } catch {
+      return false
+    }
+  })
+}
+
 export function resolveRecordingFile(id: number): ResolvedFile {
   const row = RecordingsRepository.findById(id)
   if (!row) throw createError({ statusCode: 404, statusMessage: 'recording not found' })
@@ -125,11 +140,12 @@ export function resolveRecordingFile(id: number): ResolvedFile {
 export function deleteRecording(id: number): void {
   const row = RecordingsRepository.findById(id)
   if (!row) throw createError({ statusCode: 404, statusMessage: 'recording not found' })
-  const absPath = join(env.recordDir, row.filePath)
-  try {
-    rmSync(absPath, { force: true })
-  } catch {
-    // file already gone — still drop the row
+  for (const rel of row.segments ? JSON.parse(row.segments) : [row.filePath]) {
+    try {
+      rmSync(join(env.recordDir, rel), { force: true })
+    } catch {
+      // file already gone — still drop the row
+    }
   }
   RecordingsRepository.remove(id)
   audit('warn', 'recording', `recording deleted: ${row.streamName}`, {

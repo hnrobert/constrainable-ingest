@@ -26,6 +26,15 @@ export const PublishSessionsRepository = {
       .orderBy(desc(publishSessions.startedAt))
       .all()
   },
+  /** All sessions for one event (any status), newest first — the Insights tab. */
+  findAllByEvent(eventId: number): PublishSession[] {
+    return db
+      .select()
+      .from(publishSessions)
+      .where(eq(publishSessions.eventId, eventId))
+      .orderBy(desc(publishSessions.startedAt))
+      .all()
+  },
   /** Viewer catalog: live sessions in a playing state, with current dimensions. */
   findLiveForCatalog() {
     return db

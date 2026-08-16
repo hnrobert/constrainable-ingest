@@ -116,34 +116,23 @@ function fmt(ts: number | null): string {
           <CardContent class="space-y-3">
             <p class="text-sm text-muted-foreground">
               The server challenges every publisher, so <strong>Use authentication</strong> in
-              <strong>Settings → Stream</strong> must be ON. What to enter depends on this event:
+              <strong>Settings → Stream</strong> must be ON:
             </p>
-            <template v-if="guide.requireAccountAuth">
-              <div class="space-y-1.5">
-                <Label>Username</Label>
-                <div class="flex items-center gap-2">
-                  <code class="font-mono text-sm">{{ email ?? '<your-account-email>' }}</code>
-                  <Button v-if="email" variant="link" class="h-auto p-0 text-xs" @click="copy(email ?? '', 'Copied username')">Copy</Button>
-                </div>
-                <p class="text-xs text-muted-foreground">Your account email.</p>
+            <div class="space-y-1.5">
+              <Label>Username</Label>
+              <div class="flex items-center gap-2">
+                <code class="font-mono text-sm">{{ email ?? '<your-account-email>' }}</code>
+                <Button v-if="email" variant="link" class="h-auto p-0 text-xs" @click="copy(email ?? '', 'Copied username')">Copy</Button>
               </div>
-              <div class="space-y-1.5">
-                <Label>Password</Label>
-                <p class="text-sm text-muted-foreground">
-                  Your website login password. It is never sent in plain text — OBS proves it
-                  to the server through a challenge-response.
-                </p>
-              </div>
-            </template>
-            <template v-else>
-              <div class="space-y-1.5">
-                <Label>Username / Password</Label>
-                <p class="text-sm text-muted-foreground">
-                  Anything — e.g. <code>live</code> / <code>live</code>. This event doesn't
-                  verify accounts; the fields just need to be filled for OBS to connect.
-                </p>
-              </div>
-            </template>
+              <p class="text-xs text-muted-foreground">Your account email.</p>
+            </div>
+            <div class="space-y-1.5">
+              <Label>Password</Label>
+              <p class="text-sm text-muted-foreground">
+                Your website login password. It is never sent in plain text — OBS proves it
+                to the server through a challenge-response.
+              </p>
+            </div>
           </CardContent>
         </Card>
 
@@ -190,14 +179,8 @@ function fmt(ts: number | null): string {
               <li>Set <strong>Service</strong> to <em>Custom…</em> and paste the <strong>Server</strong> above.</li>
               <li>Paste the <strong>Stream key</strong> above.</li>
               <li>
-                Turn on <strong>Use authentication</strong> and enter
-                <template v-if="guide.requireAccountAuth">
-                  your <strong>account email</strong> and <strong>website password</strong>
-                </template>
-                <template v-else>
-                  any username/password (e.g. <code>live</code> / <code>live</code>)
-                </template>
-                — see the OBS authentication card.
+                Turn on <strong>Use authentication</strong> and enter your <strong>account email</strong>
+                and <strong>website password</strong> — see the OBS authentication card.
               </li>
               <li>In <strong>Settings → Video / Output</strong>, keep resolution, FPS, and bitrate within the recommended values.</li>
               <li>Click <strong>Start Streaming</strong>. Your stream appears once it connects.</li>

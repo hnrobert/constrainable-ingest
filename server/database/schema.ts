@@ -61,7 +61,7 @@ export const events = sqliteTable(
      * Go RTMP gateway front-door performs the Adobe authmod challenge-response;
      * SRS still does event auth (publish key) via on_publish, unchanged.
      */
-    requireAccountAuth: integer('require_account_auth', { mode: 'boolean' }).notNull().default(false),
+    requireAccountAuth: integer('require_account_auth', { mode: 'boolean' }).notNull().default(true),
     /**
      * Who may see this event in catalogs/details:
      *   public     — anyone (incl. outsiders, on the homepage)
@@ -204,7 +204,14 @@ export const recordings = sqliteTable(
     }),
     streamName: text('stream_name').notNull(),
     studentLabel: text('student_label'),
-    /** path relative to RECORD_DIR */
+    /**
+     * JSON array of segment file paths (relative to RECORD_DIR), in
+     * chronological order — real-time MKV files, one per publish. Appending a
+     * user's re-publish just grows this list; no stop-time transcoding. Merge
+     * into a single stream happens on demand at playback/download time.
+     */
+    segments: text('segments'),
+    /** path relative to RECORD_DIR — the FIRST segment (compat for old rows) */
     filePath: text('file_path').notNull(),
     sizeBytes: integer('size_bytes').notNull().default(0),
     /** cumulative duration across merged segments (same user re-publishing) */

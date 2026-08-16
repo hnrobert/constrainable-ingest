@@ -22,6 +22,7 @@ const columns: DataTableColumn[] = [
   { key: 'streamName', header: 'User' },
   { key: 'sizeBytes', header: 'Size' },
   { key: 'durationSec', header: 'Duration' },
+  { key: 'bitrate', header: 'Bitrate' },
   { key: 'avgFps', header: 'Avg FPS' },
   { key: 'resolution', header: 'Resolution', class: 'text-muted-foreground' },
   { key: 'startedAt', header: 'Start time', class: 'text-muted-foreground' },
@@ -48,6 +49,11 @@ function fmtTime(ms: number | null): string {
 function resolution(r: RecordingView): string {
   return r.width && r.height ? `${r.width}×${r.height}` : '—'
 }
+/** derived average bitrate from cumulative size ÷ cumulative duration */
+function bitrate(r: RecordingView): string {
+  if (!r.durationSec || r.durationSec <= 0) return '—'
+  return `${Math.round((r.sizeBytes * 8) / 1000 / r.durationSec)} kbps`
+}
 async function onDeleted(): Promise<void> {
   selected.value = null
   await refresh()
@@ -57,8 +63,7 @@ async function onDeleted(): Promise<void> {
 <template>
   <div class="space-y-6">
     <div class="space-y-1">
-      <NuxtLink :to="`/dashboard/events/${id}`" class="text-sm text-muted-foreground hover:text-foreground">← Back to event</NuxtLink>
-      <h1 class="text-2xl font-semibold">Recordings — {{ event?.name ?? '…' }}</h1>
+      <h2 class="text-lg font-semibold">Recordings</h2>
       <p class="text-muted-foreground">
         Archived recordings of compliant streams for this event. A user's re-publishes are merged into one chronological file.
       </p>
@@ -79,6 +84,7 @@ async function onDeleted(): Promise<void> {
           </template>
           <template #cell-sizeBytes="{ row }">{{ fmtSize(row.sizeBytes) }}</template>
           <template #cell-durationSec="{ row }">{{ fmtDuration(row.durationSec) }}</template>
+          <template #cell-bitrate="{ row }">{{ bitrate(row) }}</template>
           <template #cell-avgFps="{ row }">{{ row.avgFps != null ? row.avgFps.toFixed(2) : '—' }}</template>
           <template #cell-resolution="{ row }">{{ resolution(row) }}</template>
           <template #cell-startedAt="{ row }">{{ fmtTime(row.startedAt) }}</template>

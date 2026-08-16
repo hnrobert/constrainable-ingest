@@ -145,6 +145,8 @@ export function createEvent(input: EventInput): EventView {
     status: input.status ?? 'draft',
     limitsOverride,
     recordEnabled: input.recordEnabled ?? true,
+    // account auth is mandatory for every event (single-URL gateway design)
+    requireAccountAuth: true,
     visibility: input.visibility ?? 'registered',
   })
 
@@ -180,7 +182,6 @@ export function updateEvent(id: number, patch: EventInput): EventView {
   if (patch.endsAt !== undefined) set.endsAt = toTs(patch.endsAt)
   if (patch.status != null) set.status = patch.status
   if (patch.recordEnabled != null) set.recordEnabled = patch.recordEnabled
-  if (patch.requireAccountAuth != null) set.requireAccountAuth = patch.requireAccountAuth
   if (patch.visibility != null) set.visibility = patch.visibility
   if (patch.limitsOverride !== undefined) {
     set.limitsOverride =

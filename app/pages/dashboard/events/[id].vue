@@ -1,80 +1,21 @@
 <script setup lang="ts">
-import type { EventView, EventStatus, EventVisibility } from '#shared/event-view'
-import type { GroupView } from '#shared/groups'
-import type { DataTableColumn } from '~/components/DataTable.vue'
-
-interface RosterEntry {
-  enrollmentId: number
-  studentNumber: string
-  name: string
-  email: string | null
-  seatLabel: string | null
-  hasKey: boolean
-}
+/**
+ * GitHub-repo-style event shell: a header (name, event key, status, window)
+ * plus a tab bar routing to child pages —
+ *   Overview  (/dashboard/events/:id)        connection tutorial + announcement
+ *   Insights  (…/insights)                   statistics
+ *   Records   (…/recordings)                 playback of archived recordings
+ *   Settings  (…/settings)                   admin-only configuration
+ * The wrapper only renders chrome + <NuxtPage/>; each tab owns its data.
+ */
+import type { EventView, EventVisibility } from '#shared/event-view'
 
 const route = useRoute()
 const id = Number(route.params.id)
-const toast = useToast()
-const confirm = useConfirm()
 const { user } = useAuth()
 const isAdmin = computed(() => user.value?.role === 'admin')
 
-// Sync fetch (NO top-level await) so this page doesn't drag the dashboard
-// layout into an async Suspense boundary (client hydration mismatch). Nuxt
-// still awaits the registered useFetch promises during SSR and serializes the
-// results; the template reads event/roster directly (populated on SSR for
-// direct reads), and the watchEffect below (flush:'sync') populates the editable
-// `settings` copy at the instant `event` is assigned, before the render pass.
-const { data: event, refresh: refreshEvent } = useFetch<EventView>(`/api/events/${id}`)
-const { data: roster, refresh: refreshRoster } = useFetch<RosterEntry[]>(`/api/events/${id}/roster`)
-
-// ---- settings (admin-only) ----
-const settings = ref<EventView | null>(null)
-const selectedGroupIds = ref<number[]>([])
-const allGroups = ref<GroupView[]>([])
-// flush:'sync' (with watch, not watchEffect) so settings/selectedGroupIds
-// populate at the moment `event` is assigned during SSR, before the render pass.
-// watchEffect's flush:'sync' does NOT re-fire on the SSR assignment the way
-// watch's does, so the editable copy stayed null server-side (card content
-// absent → hydration mismatch). The !settings guard makes this one-shot init.
-watch(
-  event,
-  (e) => {
-    if (e && !settings.value) {
-      settings.value = structuredClone(toRaw(e))
-      selectedGroupIds.value = e.groups.map((g) => g.id)
-    }
-  },
-  { immediate: true, flush: 'sync' },
-)
-// Groups catalog is admin-only; fetch lazily on the client for admins only.
-onMounted(async () => {
-  if (!isAdmin.value) return
-  try {
-    allGroups.value = await $fetch<GroupView[]>('/api/groups')
-  } catch {
-    /* non-admin or transient — leave empty */
-  }
-})
-
-function sameSet(a: number[], b: number[]): boolean {
-  return a.slice().sort().join(',') === b.slice().sort().join(',')
-}
-const settingsDirty = computed(() => {
-  if (!settings.value || !event.value) return false
-  const s = settings.value
-  const e = event.value
-  const scalarChanged =
-    s.name !== e.name ||
-    s.slug !== e.slug ||
-    s.description !== e.description ||
-    s.status !== e.status ||
-    s.recordEnabled !== e.recordEnabled ||
-    s.requireAccountAuth !== e.requireAccountAuth ||
-    s.visibility !== e.visibility ||
-    s.streamGuide !== e.streamGuide
-  return scalarChanged || !sameSet(selectedGroupIds.value, e.groups.map((g) => g.id))
-})
+const { data: event } = useFetch<EventView>(`/api/events/${id}`)
 
 const visibilityLabel: Record<EventVisibility, string> = {
   public: 'Public',
@@ -82,288 +23,79 @@ const visibilityLabel: Record<EventVisibility, string> = {
   groups: 'Specific groups',
 }
 
-const saving = ref(false)
-const saved = ref(false)
-/** Event key charset: lowercase letters, digits, underscore, hyphen — nothing else. */
-const EVENT_KEY_RE = /^[a-z0-9_-]+$/
-const eventKeyValid = computed(() => EVENT_KEY_RE.test(settings.value?.slug ?? ''))
-async function saveSettings(): Promise<boolean> {
-  if (!settings.value) return false
-  if (!eventKeyValid.value) {
-    toast.error('Event key may only contain lowercase letters, digits, _ and -')
-    return false
+const tabs = computed(() => {
+  const base = [
+    { to: `/dashboard/events/${id}`, label: 'Overview', exact: true },
+    { to: `/dashboard/events/${id}/insights`, label: 'Insights', exact: false },
+    { to: `/dashboard/events/${id}/recordings`, label: 'Records', exact: false },
+  ]
+  if (isAdmin.value) {
+    base.push({ to: `/dashboard/events/${id}/settings`, label: 'Settings', exact: false })
   }
-  saving.value = true
-  saved.value = false
-  try {
-    const s = settings.value
-    const updated = await $fetch<EventView>(`/api/events/${id}`, {
-      method: 'PATCH',
-      body: {
-        name: s.name,
-        slug: s.slug,
-        description: s.description,
-        status: s.status,
-        recordEnabled: s.recordEnabled,
-        requireAccountAuth: s.requireAccountAuth,
-        visibility: s.visibility,
-        streamGuide: s.streamGuide,
-        groupIds: selectedGroupIds.value,
-      },
-    })
-    event.value = updated
-    settings.value = structuredClone(updated)
-    selectedGroupIds.value = updated.groups.map((g) => g.id)
-    toast.success('Event updated')
-    saved.value = true
-    setTimeout(() => {
-      saved.value = false
-    }, 2000)
-    return true
-  } catch (e: any) {
-    toast.error('Save failed: ' + (e?.data?.statusMessage || e?.message || ''))
-    return false
-  } finally {
-    saving.value = false
-  }
-}
-function resetSettings(): void {
-  if (event.value) {
-    settings.value = structuredClone(toRaw(event.value))
-    selectedGroupIds.value = event.value.groups.map((g) => g.id)
-  }
-}
+  return base
+})
 
-// Warn before leaving with unsaved settings; the SaveBar + dialog provide the UI.
-const { confirmLeave, proceed } = useUnsavedLeaveGuard(settingsDirty, saving)
-async function saveAndLeave(): Promise<void> {
-  if (await saveSettings()) proceed()
-}
-function discardAndLeave(): void {
-  resetSettings()
-  proceed()
-}
+const activeTab = computed(
+  () =>
+    tabs.value.find((t) => (t.exact ? route.path === t.to : route.path.startsWith(t.to)))?.label ??
+    'Overview',
+)
 
-// ---- roster CSV import (admin) ----
-const csvText = ref('')
-const importing = ref(false)
-function parseCsv(text: string): { studentNumber: string; name: string; email?: string; seatLabel?: string }[] {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  let rows = lines.map((l) => l.split(/[,\t;]/).map((c) => c.trim()))
-  if (rows.length && /name|student/i.test(rows[0]?.join(' ') ?? '')) rows = rows.slice(1)
-  return rows
-    .map((r) => ({
-      studentNumber: r[0] ?? '',
-      name: r[1] ?? '',
-      email: r[2] || undefined,
-      seatLabel: r[3] || undefined,
-    }))
-    .filter((r) => r.studentNumber && r.name)
+function fmtWindow(e: EventView): string {
+  const f = (ms: number | null) => (ms ? new Date(ms).toLocaleString('en-US', { hour12: false }) : null)
+  const s = f(e.startsAt)
+  const en = f(e.endsAt)
+  if (!s && !en) return ''
+  return `${s ?? '…'} → ${en ?? '…'}`
 }
-async function importRoster(): Promise<void> {
-  const students = parseCsv(csvText.value)
-  if (students.length === 0) {
-    toast.error('No valid rows parsed (user ID, name)')
-    return
-  }
-  importing.value = true
-  try {
-    const r = await $fetch<{ created: number; updated: number }>(`/api/events/${id}/roster/bulk`, {
-      method: 'POST',
-      body: { students },
-    })
-    toast.success(`Import complete: ${r.created} new, ${r.updated} updated`)
-    csvText.value = ''
-    await refreshRoster()
-  } catch (e: any) {
-    toast.error('Import failed: ' + (e?.data?.statusMessage || e?.message || ''))
-  } finally {
-    importing.value = false
-  }
+const statusVariant: Record<string, 'secondary' | 'warning' | 'success' | 'destructive'> = {
+  draft: 'secondary',
+  scheduled: 'warning',
+  live: 'success',
+  ended: 'secondary',
+  archived: 'destructive',
 }
-function removeEntry(enrollmentId: number): void {
-  confirm.ask('Remove this user from the roster?', async () => {
-    try {
-      await $fetch(`/api/events/${id}/roster/${enrollmentId}`, { method: 'DELETE' })
-      await refreshRoster()
-      toast.info('Removed')
-    } catch (e: any) {
-      toast.error('Remove failed: ' + (e?.data?.statusMessage || e?.message || ''))
-    }
-  }, { actionLabel: 'Remove' })
-}
-
-
-async function copy(text: string, label = 'Copied'): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.success(label)
-  } catch {
-    toast.error('Copy failed, please copy manually')
-  }
-}
-
-const statusOptions: { value: EventStatus; label: string }[] = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'scheduled', label: 'Scheduled' },
-  { value: 'live', label: 'Live' },
-  { value: 'ended', label: 'Ended' },
-  { value: 'archived', label: 'Archived' },
-]
-
-const rosterColumns: DataTableColumn[] = [
-  { key: 'studentNumber', header: 'User ID' },
-  { key: 'name', header: 'Name' },
-  { key: 'seatLabel', header: 'Seat', class: 'text-muted-foreground' },
-  { key: 'actions', header: '', headClass: 'w-0' },
-]
-
 </script>
 
 <template>
-  <div v-if="event" class="space-y-6 pb-24">
+  <div v-if="event" class="space-y-6">
+    <!-- repo-style header -->
     <div class="space-y-1">
       <NuxtLink to="/dashboard/events" class="text-sm text-muted-foreground hover:text-foreground">← Back to events</NuxtLink>
-      <h1 class="text-2xl font-semibold">{{ event.name }}</h1>
-      <p class="text-muted-foreground">event key: <code class="font-mono">{{ event.slug }}</code></p>
+      <div class="flex flex-wrap items-center gap-3">
+        <h1 class="text-2xl font-semibold tracking-tight">{{ event.name }}</h1>
+        <Badge :variant="statusVariant[event.status] ?? 'secondary'">{{ event.status }}</Badge>
+        <Badge variant="outline" class="font-mono text-xs">{{ event.slug }}</Badge>
+      </div>
       <p v-if="event.description" class="text-muted-foreground">{{ event.description }}</p>
-      <NuxtLink :to="`/dashboard/events/${id}/recordings`" class="text-sm text-primary underline-offset-4 hover:underline">
-        View this event's recordings →
-      </NuxtLink>
       <p class="text-xs text-muted-foreground">
-        Status: {{ event.status }} · Visibility: {{ visibilityLabel[event.visibility] }}
+        Visibility: {{ visibilityLabel[event.visibility] }}
         <template v-if="event.visibility === 'groups' && event.groups.length">
-          · Groups: {{ event.groups.map((g) => g.name).join(', ') }}
+          · {{ event.groups.map((g) => g.name).join(', ') }}
+        </template>
+        <template v-if="fmtWindow(event)">
+          · Window: {{ fmtWindow(event) }}
         </template>
       </p>
     </div>
 
-    <Card v-if="isAdmin">
-      <CardHeader><CardTitle>Event settings</CardTitle></CardHeader>
-      <CardContent v-if="settings" class="space-y-4">
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div class="space-y-1.5">
-            <Label>Display Name</Label>
-            <Input v-model="settings.name" />
-          </div>
-          <div class="space-y-1.5">
-            <Label>Event key</Label>
-            <Input v-model="settings.slug" />
-            <p v-if="!eventKeyValid" class="text-xs text-destructive">
-              Lowercase letters, digits, <code>_</code> and <code>-</code> only.
-            </p>
-            <p class="text-xs text-muted-foreground">
-              Also the guide URL (<code>/e/&lt;event-key&gt;</code>) and the OBS stream key contestants paste.
-            </p>
-          </div>
-          <div class="space-y-1.5 sm:col-span-2">
-            <Label>Description</Label>
-            <!-- description is string | null; bind explicitly so null renders
-                 empty but is preserved untouched on save (native-input parity). -->
-            <Input
-              :model-value="settings.description ?? ''"
-              @update:model-value="settings.description = String($event)"
-            />
-          </div>
-          <div class="space-y-1.5">
-            <Label>Status</Label>
-            <Select v-model="settings.status">
-              <SelectTrigger class="w-full"><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="o in statusOptions" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="space-y-1.5">
-            <Label>Visibility</Label>
-            <Select v-model="settings.visibility">
-              <SelectTrigger class="w-full"><SelectValue placeholder="Visibility" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="registered">Registered users</SelectItem>
-                <SelectItem value="public">Public (anyone, incl. homepage)</SelectItem>
-                <SelectItem value="groups">Specific groups</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="flex items-center gap-2 self-end pb-1 sm:col-span-2">
-            <Checkbox v-model="settings.recordEnabled" />
-            <span class="text-sm">Enable recording</span>
-          </div>
-          <div class="flex items-center gap-2 self-end pb-1 sm:col-span-2">
-            <Checkbox v-model="settings.requireAccountAuth" />
-            <span class="text-sm">
-              Require OBS account authentication
-              <span class="block text-xs text-muted-foreground">
-                With this on, contestants must enter their website email + password in OBS'
-                "Use authentication" fields (verified by the RTMP gateway). Everyone keeps Use
-                authentication ON — with this off, any credentials (e.g. live/live) are accepted.
-              </span>
-            </span>
-          </div>
-          <div v-if="settings.visibility === 'groups'" class="space-y-1.5 sm:col-span-2">
-            <Label>Allowed groups</Label>
-            <div class="flex flex-col gap-2">
-              <!-- Native checkbox here: reka Checkbox only models a boolean, but
-                   this is an array binding (selectedGroupIds). Keeping <input> preserves
-                   the exact multi-select semantics without changing script logic. -->
-              <label v-for="g in allGroups" :key="g.id" class="flex items-center gap-2 text-sm">
-                <input type="checkbox" :value="g.id" v-model="selectedGroupIds" class="size-4" />
-                <span>{{ g.name }} <span class="text-muted-foreground">({{ g.memberCount }})</span></span>
-              </label>
-              <p v-if="!allGroups.length" class="text-xs text-muted-foreground">No groups exist yet — create some on the Groups page first.</p>
-            </div>
-          </div>
-          <div class="space-y-1.5 sm:col-span-2">
-            <Label>Participant guide instructions</Label>
-            <Textarea
-              :model-value="settings.streamGuide ?? ''"
-              @update:model-value="settings.streamGuide = String($event) || null"
-              rows="3"
-              placeholder="Optional notes shown on the participant guide (e.g. join 5 min early, use wired ethernet…)"
-            />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <!-- GitHub-style tab bar -->
+    <nav class="flex gap-1 border-b" aria-label="Event sections">
+      <NuxtLink
+        v-for="t in tabs"
+        :key="t.to"
+        :to="t.to"
+        class="-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors"
+        :class="
+          activeTab === t.label
+            ? 'border-primary text-primary'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+        "
+      >
+        {{ t.label }}
+      </NuxtLink>
+    </nav>
 
-    <Card v-if="isAdmin">
-      <CardHeader><CardTitle>Roster ({{ roster?.length ?? 0 }})</CardTitle></CardHeader>
-      <CardContent class="space-y-4">
-        <p class="text-xs text-muted-foreground">Paste CSV: one row per line as <code>user_id,name[,email][,seat]</code>. A header row is skipped automatically.</p>
-        <Textarea v-model="csvText" rows="4" placeholder="2024001,Alice,alice@x.edu,A1&#10;2024002,Bob,,B2" />
-        <div class="flex items-center justify-end gap-3">
-          <Button variant="outline" :disabled="importing" @click="importRoster">{{ importing ? 'Importing…' : 'Import' }}</Button>
-        </div>
-        <DataTable
-          :columns="rosterColumns"
-          :rows="roster ?? []"
-          :row-key="(r: RosterEntry) => r.enrollmentId"
-          empty="No roster yet."
-        >
-          <template #cell-seatLabel="{ row }">{{ row.seatLabel ?? '—' }}</template>
-          <template #cell-actions="{ row }">
-            <Button size="sm" variant="destructive" @click="removeEntry(row.enrollmentId)">Remove</Button>
-          </template>
-        </DataTable>
-      </CardContent>
-    </Card>
-
-
-    <SaveBar :dirty="settingsDirty" :saving="saving" :saved="saved" @save="saveSettings" @discard="resetSettings" />
-    <UnsavedLeaveDialog
-      :open="confirmLeave"
-      :saving="saving"
-      @stay="confirmLeave = false"
-      @discard="discardAndLeave"
-      @save="saveAndLeave"
-    />
-
-    <ConfirmDialog
-      v-model:open="confirm.state.open"
-      :message="confirm.state.message"
-      :action-label="confirm.state.actionLabel"
-      :destructive="confirm.state.destructive"
-      @accept="confirm.accept"
-    />
+    <NuxtPage />
   </div>
 </template>

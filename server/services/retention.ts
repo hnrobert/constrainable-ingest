@@ -24,10 +24,12 @@ export function runRetention(): RetentionResult {
     const cutoff = new Date(Date.now() - cfg.record.retentionDays * 86_400_000)
     const expired = RecordingsRepository.findExpired(cutoff)
     for (const r of expired) {
-      try {
-        rmSync(join(env.recordDir, r.filePath), { force: true })
-      } catch {
-        // file already gone
+      for (const rel of r.segments ? JSON.parse(r.segments) : [r.filePath]) {
+        try {
+          rmSync(join(env.recordDir, rel), { force: true })
+        } catch {
+          // file already gone
+        }
       }
       RecordingsRepository.remove(r.id)
       deleted += 1

@@ -68,6 +68,7 @@ const columns: DataTableColumn[] = [
   { key: 'streamName', header: 'User', class: 'font-medium' },
   { key: 'resolution', header: 'Resolution' },
   { key: 'fps', header: 'Framerate' },
+  { key: 'bitrateKbps', header: 'Bitrate' },
   { key: 'status', header: 'Status' },
   { key: 'startedAt', header: 'Started', class: 'text-muted-foreground' },
   { key: 'actions', header: 'Action', headClass: 'w-0' },
@@ -87,6 +88,7 @@ const columns: DataTableColumn[] = [
     <template #cell-event="{ row }">{{ props.eventLabels[row.eventId ?? -1] ?? '—' }}</template>
     <template #cell-resolution="{ row }">{{ resolution(row) }}</template>
     <template #cell-fps="{ row }">{{ row.fps != null ? row.fps.toFixed(2) : '—' }}</template>
+    <template #cell-bitrateKbps="{ row }">{{ row.bitrateKbps != null ? `${row.bitrateKbps} kbps` : '—' }}</template>
     <template #cell-startedAt="{ row }">{{ fmtTime(row.startedAt) }}</template>
     <template #cell-actions="{ row }">
       <div class="flex justify-end gap-1.5">

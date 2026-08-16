@@ -33,7 +33,7 @@ export default defineEventHandler((event) => {
         (!row.endsAt || now <= row.endsAt.getTime())
   return {
     publishKey: !!row,
-    requireAccountAuth: row?.requireAccountAuth ?? false,
+    requireAccountAuth: true, // account auth is mandatory for every event
     windowOpen: row?.status === 'archived' ? false : windowOpen,
     banned: !!stream && isKickBanned(stream),
   }

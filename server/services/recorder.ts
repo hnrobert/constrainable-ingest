@@ -50,7 +50,7 @@ export function startRecording(
   if (handles.has(streamName)) return
   const tmpDir = join(env.recordDir, '_tmp')
   mkdirSync(tmpDir, { recursive: true })
-  const tmpPath = join(tmpDir, `${safeName(streamName)}_${clientId}.flv`)
+  const tmpPath = join(tmpDir, `${safeName(streamName)}_${clientId}.mkv`)
   const cmd = [
     env.ffmpegPath,
     '-y',
@@ -60,10 +60,14 @@ export function startRecording(
     // HTTP-FLV pull: SRS's RTMP-play path starves on low-fps streams (see
     // srs-url.ts); the FLV path serves the same stream reliably.
     buildFlvPullUrl(streamName),
+    '-map',
+    '0',
     '-c',
     'copy',
+    // Matroska is streamable while being written — this IS the archive file,
+    // written in real time. No remux/transcode happens at stop.
     '-f',
-    'flv',
+    'matroska',
     tmpPath,
   ]
   const proc = Bun.spawn({ cmd, stdin: 'pipe', stdout: 'ignore', stderr: 'ignore' })
@@ -113,11 +117,10 @@ export async function stopRecording(
 }
 
 /**
- * Remux temp FLV → MP4 under {RECORD_DIR}/{YYYY-MM-DD}/; keep .flv on failure.
- * MERGE: a user re-publishing into the same event appends to their existing
- * recording (chronological: earlier segments first). Same-codec copies go
- * through ffmpeg's concat demuxer into the SAME file; the DB row keeps the
- * original start, accumulates size/duration, and its end moves to now.
+ * Finalize one recorded segment. NO transcoding here — the temp file is
+ * already a real-time MKV archive; we only rename it into place and update the
+ * DB. A user's re-publish appends to their existing row as a new segment
+ * (chronological list); playback/download glue the segments on demand.
  */
 async function finalizeRecording(
   streamName: string,
@@ -131,93 +134,61 @@ async function finalizeRecording(
   const { date, ts } = localParts(new Date(h.startedAt))
   const dateDir = join(env.recordDir, date)
   mkdirSync(dateDir, { recursive: true })
-  const base = join(dateDir, `${safeName(streamName)}_${ts}`)
-  const segPath = `${base}.mp4`
-
-  const remux = [env.ffmpegPath, '-y', '-v', 'error', '-i', h.tmpPath, '-c', 'copy', '-f', 'mp4', segPath]
-  const remuxProc = Bun.spawn({ cmd: remux, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
-  const remuxCode = await awaitExitOrKill(remuxProc, getConfig().record.remuxTimeoutMs)
-  if (remuxCode !== 0) {
-    const stderr = await readStream(remuxProc.stderr as ReadableStream<Uint8Array> | null)
-    const fallback = `${base}.flv`
-    try {
-      renameSync(h.tmpPath, fallback)
-      console.error(
-        `[recorder] MP4 remux failed for ${streamName} (${stderr.trim()}); kept FLV: ${fallback}`,
-      )
-    } catch (err) {
-      console.error(`[recorder] remux + FLV fallback failed for ${streamName}:`, err)
-    }
+  const segPath = join(dateDir, `${safeName(streamName)}_${ts}.mkv`)
+  try {
+    renameSync(h.tmpPath, segPath)
+  } catch (err) {
+    console.error(`[recorder] failed to move segment for ${streamName}:`, err)
     return
   }
-  try {
-    rmSync(h.tmpPath)
-  } catch {
-    // ignore
-  }
-
-  // ---- merge into the user's existing recording for this event ----
-  const prev =
-    eventId != null ? RecordingsRepository.findMergeTarget(eventId, streamName) : undefined
-  if (prev) {
-    const prevAbs = join(env.recordDir, prev.filePath)
-    const combinedPath = `${base}_combined.mp4`
-    const ok = await concatMp4([prevAbs, segPath], combinedPath)
-    if (ok) {
-      try {
-        renameSync(combinedPath, prevAbs)
-        rmSync(segPath)
-      } catch (err) {
-        console.error(`[recorder] merge replace failed for ${streamName}:`, err)
-        return
-      }
-      const prevDur = prev.durationSec ?? 0
-      const prevSize = statSync(prevAbs).size
-      const prevFps = prev.avgFps ?? 0
-      RecordingsRepository.update(prev.id, {
-        sizeBytes: prevSize,
-        durationSec: prevDur + segDurSec,
-        avgFps:
-          prevFps && h.fps
-            ? (prevFps * prevDur + h.fps * segDurSec) / Math.max(1, prevDur + segDurSec)
-            : (h.fps ?? prevFps),
-        width: h.width ?? prev.width,
-        height: h.height ?? prev.height,
-        endedAt,
-      })
-      emit('recording:ready', {
-        id: prev.id,
-        eventId,
-        sessionId,
-        streamName,
-        studentLabel,
-        filePath: prev.filePath,
-        sizeBytes: prevSize,
-        durationSec: prevDur + segDurSec,
-        startedAt: prev.startedAt.getTime(),
-      })
-      console.log(
-        `[recorder] merged ${streamName} +${segDurSec}s into #${prev.id} (${prev.filePath})`,
-      )
-      return
-    }
-    console.error(`[recorder] concat failed for ${streamName}; storing segment separately`)
-    // fall through to a standalone row
-  }
-
+  const rel = relative(env.recordDir, segPath)
   let size = 0
   try {
     size = statSync(segPath).size
   } catch {
     // ignore
   }
-  const rel = relative(env.recordDir, segPath)
+
+  const prev =
+    eventId != null ? RecordingsRepository.findMergeTarget(eventId, streamName) : undefined
+  if (prev) {
+    const segs: string[] = prev.segments ? JSON.parse(prev.segments) : [prev.filePath]
+    segs.push(rel)
+    RecordingsRepository.update(prev.id, {
+      segments: JSON.stringify(segs),
+      sizeBytes: prev.sizeBytes + size,
+      durationSec: (prev.durationSec ?? 0) + segDurSec,
+      avgFps:
+        prev.avgFps && h.fps
+          ? (prev.avgFps * (prev.durationSec ?? 0) + h.fps * segDurSec) /
+            Math.max(1, (prev.durationSec ?? 0) + segDurSec)
+          : (h.fps ?? prev.avgFps),
+      width: h.width ?? prev.width,
+      height: h.height ?? prev.height,
+      endedAt,
+    })
+    emit('recording:ready', {
+      id: prev.id,
+      eventId,
+      sessionId,
+      streamName,
+      studentLabel,
+      filePath: prev.filePath,
+      sizeBytes: prev.sizeBytes + size,
+      durationSec: (prev.durationSec ?? 0) + segDurSec,
+      startedAt: prev.startedAt.getTime(),
+    })
+    console.log(`[recorder] appended ${streamName} segment +${segDurSec}s to #${prev.id}`)
+    return
+  }
+
   const row = RecordingsRepository.insert({
     eventId,
     sessionId,
     streamName,
     studentLabel,
     filePath: rel,
+    segments: JSON.stringify([rel]),
     sizeBytes: size,
     durationSec: segDurSec,
     avgFps: h.fps,
@@ -237,41 +208,7 @@ async function finalizeRecording(
     durationSec: segDurSec,
     startedAt: h.startedAt,
   })
-  console.log(`[recorder] saved ${segPath} (${size} bytes, ${segDurSec}s)`)
-}
-
-/** Concatenate same-codec MP4s with ffmpeg's concat demuxer (-c copy). */
-async function concatMp4(parts: string[], outPath: string): Promise<boolean> {
-  const listPath = `${outPath}.txt`
-  const list = parts.map((p) => `file '${p.replaceAll("'", "'\''")}'`).join('\n')
-  const listFile = Bun.file(listPath)
-  await listFile.write(list)
-  const cmd = [
-    env.ffmpegPath,
-    '-y',
-    '-v',
-    'error',
-    '-f',
-    'concat',
-    '-safe',
-    '0',
-    '-i',
-    listPath,
-    '-c',
-    'copy',
-    '-f',
-    'mp4',
-    outPath,
-  ]
-  const proc = Bun.spawn({ cmd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
-  const code = await awaitExitOrKill(proc, getConfig().record.remuxTimeoutMs)
-  try {
-    rmSync(listPath)
-    if (code !== 0) rmSync(outPath, { force: true })
-  } catch {
-    // ignore
-  }
-  return code === 0
+  console.log(`[recorder] saved ${segPath} (${size} bytes, ${segDurSec}s, real-time mkv)`)
 }
 
 /** Local-time date parts (TZ-dependent; container TZ=Asia/Shanghai). */
