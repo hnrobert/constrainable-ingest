@@ -73,8 +73,6 @@ export const appConfigSchema = z.object({
   srs: srsSchema.default(srsSchema.parse({})),
   probe: probeSchema.default(probeSchema.parse({})),
   limits: limitsSchema.default(limitsSchema.parse({})),
-  /** what to do when a stream exceeds limits */
-  enforce: z.enum(['kick', 'flag']).default('kick'),
   record: recordSchema.default(recordSchema.parse({})),
   concurrency: concurrencySchema.default(concurrencySchema.parse({})),
   registration: registrationSchema.default(registrationSchema.parse({})),

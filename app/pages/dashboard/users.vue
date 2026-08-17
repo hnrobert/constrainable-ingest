@@ -107,6 +107,16 @@ const columns: DataTableColumn[] = [
     </div>
 
     <Card>
+      <CardHeader>
+        <CardTitle>Streaming bans (site-wide blacklist)</CardTitle>
+        <CardDescription>Banned accounts can never publish anywhere. Manage the list below.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <StreamsBansPanel />
+      </CardContent>
+    </Card>
+
+    <Card>
       <CardContent>
         <DataTable
           :columns="columns"

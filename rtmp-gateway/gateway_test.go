@@ -300,7 +300,7 @@ func mockAppMux(token, authKey, openKey, user, salt, salted2 string) *http.Serve
 		isKey := (tok == authKey && authKey != "") || (tok == openKey && openKey != "") || tok == closedKey
 		require := isKey && tok == authKey
 		open := tok != closedKey
-		banned := stream == "banned_example.com"
+		banned := stream == "banned@example.com"
 		_, _ = io.WriteString(w, `{"publishKey":`+b2s(isKey)+`,"requireAccountAuth":`+b2s(require)+`,"windowOpen":`+b2s(open)+`,"banned":`+b2s(banned)+`}`)
 	})
 	return mux
@@ -471,7 +471,7 @@ func TestPublishPolicyEnforcement(t *testing.T) {
 	// 2) authed publisher + bare auth key → upstream name = the authed email
 	c, cw, cr = danceAuth(t, addr, user, password)
 	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish(authKey)})
-	expectName(t, names, "robert_example.com?token="+authKey)
+	expectName(t, names, "robert@example.com?token="+authKey)
 	c.Close()
 
 	// 3) authed publisher under ANOTHER user's explicit name → rejected
@@ -540,9 +540,9 @@ func b2s(b bool) string {
 	return "false"
 }
 
-// A kick-banned user must be refused at STAGE 2 of the dance (fatal authfailed),
+// A banned user must be refused at STAGE 2 of the dance (fatal authfailed),
 // so OBS stops its reconnect loop at connect time instead of reaching publish.
-func TestStage2KickBanRefusesConnection(t *testing.T) {
+func TestStage2BanRefusesConnection(t *testing.T) {
 	const (
 		user  = "robert@example.com"
 		salt  = "deadbeefsalt"

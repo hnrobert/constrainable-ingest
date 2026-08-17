@@ -95,6 +95,27 @@ export const events = sqliteTable(
   ],
 )
 
+/* -------------------------------- stream_bans ------------------------------- */
+/**
+ * Streaming bans (小黑屋). `eventId` NULL = site-wide; otherwise scoped to one
+ * event. Bans are permanent until lifted; enforced at the RTMP gateway's salt
+ * stage (site-wide, by account email) and publish-policy stage (both scopes).
+ */
+export const streamBans = sqliteTable(
+  'stream_bans',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    /** the banned publisher's account email (gateway identity) */
+    email: text('email').notNull(),
+    /** null = site-wide; otherwise the ban applies to this event only */
+    eventId: integer('event_id').references(() => events.id, { onDelete: 'cascade' }),
+    reason: text('reason'),
+    bannedBy: text('banned_by'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(now),
+  },
+  (t) => [unique('uq_stream_bans_scope').on(t.email, t.eventId)],
+)
+
 /* ---------------------------- event_slug_aliases --------------------------- */
 /**
  * Renamed-event redirects: when an event's key (slug) changes, the old key
@@ -338,6 +359,8 @@ export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type Event = typeof events.$inferSelect
 export type EventSlugAlias = typeof eventSlugAliases.$inferSelect
+export type StreamBan = typeof streamBans.$inferSelect
+export type NewStreamBan = typeof streamBans.$inferInsert
 export type NewEventSlugAlias = typeof eventSlugAliases.$inferInsert
 export type NewEvent = typeof events.$inferInsert
 export type Student = typeof students.$inferSelect

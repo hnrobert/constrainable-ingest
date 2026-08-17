@@ -12,27 +12,28 @@ const emit = defineEmits<{ watch: [streamName: string] }>()
 const toast = useToast()
 const confirm = useConfirm()
 
-/** Sessions that still have a live publisher and can be kicked. */
-function kickable(s: SessionSnapshot): boolean {
+/** Sessions with a live publisher that can be banned+disconnected. */
+function bannable(s: SessionSnapshot): boolean {
   return ['pending', 'allowed', 'compliant', 'violating'].includes(s.status) && !!s.srsClientId
 }
 
-function kick(s: SessionSnapshot): void {
+function ban(s: SessionSnapshot): void {
+  // stream names are the account email (gateway identity) for authed publishers
   confirm.ask(
-    `Kick ${s.streamName}? The publisher will be disconnected immediately (their recording is kept).`,
+    `Ban ${s.streamName} from streaming site-wide and disconnect them now? The ban is permanent — lifted only from the blacklist.`,
     async () => {
       try {
         await $fetch(
-          `/api/streams/clients/${encodeURIComponent(s.srsClientId!)}?stream=${encodeURIComponent(s.streamName)}`,
+          `/api/streams/clients/${encodeURIComponent(s.srsClientId!)}?email=${encodeURIComponent(s.streamName)}`,
           { method: 'DELETE' },
         )
-        toast.success(`Kicked ${s.streamName}`)
+        toast.success(`Banned ${s.streamName} (site-wide)`)
         // the row disappears on its own via the session:stop socket event
       } catch (e: any) {
-        toast.error('Kick failed: ' + (e?.data?.statusMessage || e?.message || ''))
+        toast.error('Ban failed: ' + (e?.data?.statusMessage || e?.message || ''))
       }
     },
-    { actionLabel: 'Kick' },
+    { actionLabel: 'Ban' },
   )
 }
 
@@ -93,7 +94,7 @@ const columns: DataTableColumn[] = [
     <template #cell-actions="{ row }">
       <div class="flex justify-end gap-1.5">
         <Button size="sm" variant="outline" @click="emit('watch', row.streamName)">Watch</Button>
-        <Button v-if="kickable(row)" size="sm" variant="destructive" @click="kick(row)">Kick</Button>
+        <Button v-if="bannable(row)" size="sm" variant="destructive" @click="ban(row)">Ban</Button>
       </div>
     </template>
   </DataTable>

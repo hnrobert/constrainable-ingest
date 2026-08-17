@@ -1,15 +1,15 @@
 /**
- * Stage-2 salt lookup for the RTMP gateway, plus the kick-ban flag: a kicked
- * publisher's OBS reconnects within seconds and its dance carries the account
- * email HERE — refusing at this stage with a fatal auth error (the gateway's
- * job) stops the reconnect loop at CONNECT time, before any publish attempt.
- * Unknown users get a random salt (byte-identical challenge, no enumeration).
- * Token-gated like the other /api/srs/rtmp-auth endpoints: never public.
+ * Stage-2 salt lookup for the RTMP gateway, plus the site-wide ban flag: a
+ * banned account's OBS reconnect carries its email in the dance — refusing at
+ * this stage with a fatal auth error stops it at CONNECT time, before any
+ * publish attempt. Event-scoped bans can't be checked here (the event is only
+ * known at publish); the policy endpoint covers both scopes. Unknown users get
+ * a random salt (byte-identical challenge, no enumeration). Token-gated.
  */
 import { createError, getHeader, getQuery } from 'h3'
 import { env } from '../../../utils/env'
 import { UsersRepository } from '../../../repositories/users.repository'
-import { isKickBanned, streamKeyForEmail } from '../../../services/kick-bans'
+import { isSiteWideBanned } from '../../../services/stream-bans'
 
 export default defineEventHandler((event) => {
   if (getHeader(event, 'x-rtmp-auth') !== env.rtmpAuthToken) {
@@ -17,9 +17,8 @@ export default defineEventHandler((event) => {
   }
   const email = String(getQuery(event).email ?? '').trim().toLowerCase()
   const user = email ? UsersRepository.findByEmail(email) : undefined
-  const banned = !!email && isKickBanned(streamKeyForEmail(email))
+  const banned = !!email && isSiteWideBanned(email)
   if (!user?.authmodSalt) {
-    // random salt keeps the challenge shape identical for unknown users
     return { salt: randomSalt(), banned }
   }
   return { salt: user.authmodSalt, banned }

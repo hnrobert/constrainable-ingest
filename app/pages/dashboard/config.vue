@@ -53,20 +53,6 @@ const sections: Section[] = [
     ],
   },
   {
-    title: 'Violation Handling',
-    fields: [
-      {
-        path: 'enforce',
-        label: 'Enforcement mode',
-        kind: 'select',
-        options: [
-          { value: 'kick', label: 'Kick (kick) — disconnect on limit breach' },
-          { value: 'flag', label: 'Flag only (flag) — alert without disconnecting' },
-        ],
-      },
-    ],
-  },
-  {
     title: 'Probe (ffprobe)',
     fields: [
       { path: 'probe.waitMs', label: 'Wait before first probe (ms)', kind: 'number' },

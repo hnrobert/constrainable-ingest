@@ -1,27 +1,39 @@
 /**
- * Admin: force-disconnect a live publisher (the "Kick" button on the realtime
- * panel). Kills the SRS client and records a short-lived kick ban for the
- * stream name so OBS's automatic reconnect (seconds later, same key) is
- * rejected terminally by the RTMP gateway instead of going live again. SRS then
- * fires on_unpublish, which ends the session, finalizes the recording, and
- * pushes session:stop so the panel row disappears.
+ * Admin: ban a live publisher (site-wide) and disconnect them immediately.
+ * The ban is permanent — lifted only from the blacklist UI. Disconnect kills
+ * the SRS client; SRS fires on_unpublish, ending the session and finalizing
+ * the recording. With the RTMP gateway in front, the OBS connection tears
+ * down too, and every reconnect is refused at the dance (salt) stage.
  */
-import { createError, getHeader, getRouterParam } from 'h3'
+import { createError, getRouterParam } from 'h3'
 import { killClient } from '../../../services/srs-client'
-import { recordKickBan } from '../../../services/kick-bans'
+import { ban } from '../../../services/stream-bans'
 import { audit } from '../../../services/audit'
 
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
   const clientId = getRouterParam(event, 'clientId')
   if (!clientId) throw createError({ statusCode: 400, statusMessage: 'clientId is required' })
-  const streamName = String(getHeader(event, 'x-stream-name') || getQuery(event).stream || '').trim()
+  const email = String(getQuery(event).email || '').trim().toLowerCase()
+  const reason = String(getQuery(event).reason || '').trim() || null
 
-  const ok = await killClient(clientId)
-  if (streamName) recordKickBan(streamName)
-  audit(ok ? 'warn' : 'error', 'publish', `admin kicked client ${clientId} (${ok ? 'ok' : 'failed'})`, {
-    detail: { clientId, streamName, banned: !!streamName },
+  if (!email) {
+    throw createError({ statusCode: 400, statusMessage: 'email is required to ban' })
+  }
+
+  const row = ban({
+    email,
+    eventId: null,
+    reason: reason ?? 'banned from live monitoring',
+    bannedBy: event.context.auth ? `user#${event.context.auth.userId}` : null,
   })
-  if (!ok) throw createError({ statusCode: 502, statusMessage: 'SRS rejected the kick (already gone?)' })
-  return { ok: true, banned: !!streamName }
+  const ok = await killClient(clientId)
+  audit(ok ? 'warn' : 'error', 'publish', `admin banned+disconnected ${email} (${ok ? 'ok' : 'disconnect failed'})`, {
+    detail: { email, clientId, banId: row.id },
+  })
+  if (!ok) {
+    // ban stands even if the disconnect raced (stream already gone)
+    return { ok: true, banned: true, disconnected: false, ban: row }
+  }
+  return { ok: true, banned: true, disconnected: true, ban: row }
 })

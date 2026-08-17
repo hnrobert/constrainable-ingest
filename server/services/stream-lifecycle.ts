@@ -20,7 +20,6 @@ import { sleep } from '../utils/process'
 import { buildFlvPullUrl } from '../utils/srs-url'
 import { probeStream, type ProbeResult } from './probe'
 import * as recorder from './recorder'
-import { killClient } from './srs-client'
 import { authorizePublish } from './access-control'
 import { audit } from './audit'
 import { emit } from '../utils/bus'
@@ -244,18 +243,8 @@ async function monitorSession(s: ActiveSession, studentLabel: string | null): Pr
           streamName: s.streamName,
           detail: { reasons, ...result },
         })
-        if (cfg.enforce === 'kick') {
-          const ok = await killClient(s.clientId)
-          metrics.status = 'killed'
-          persistStatus(s.sessionId, 'killed', new Date())
-          s.active = false
-          audit(ok ? 'warn' : 'error', 'publish', `kicked ${s.streamName} (${ok ? 'ok' : 'failed'})`, {
-            eventId: s.eventId,
-            streamName: s.streamName,
-          })
-          break
-        }
-        // flag mode: warn only, keep monitoring
+        // violations flag + keep monitoring; enforcement is manual (ban) —
+        // the old auto-kick config path was removed with the kick mechanism
       } else if (!metrics.compliant) {
         metrics.compliant = true
         metrics.status = 'compliant'

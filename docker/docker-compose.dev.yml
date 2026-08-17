@@ -9,13 +9,14 @@
 #     RTMP_AUTH_TOKEN=dev-insecure-rtmp-token go run ./rtmp-gateway
 #   bun run dev --port 31954   # with RTMP_AUTH_TOKEN + SRS_RTMP_HOST=127.0.0.1:11935
 #
-# (Requires docker compose v2.24+ for the `!override` tag.)
+# The base file publishes NO srs ports (production hardening), so this plain
+# `ports:` block simply adds the dev mappings — no `!override` tag needed.
 services:
   srs:
     environment:
       # http_hooks → the host-run dev app (Vite/Nitro on :31954), not the app container
       BACKEND: "host.docker.internal:31954"
-    ports: !override
+    ports:
       - "11935:1935"   # SRS RTMP, remapped off 1935 so the dev gateway can own :1935
       - "1985:1985"   # HTTP API + WHEP
       - "18080:8080"   # HTTP-FLV, remapped off 8080 (the host's :8080 is commonly

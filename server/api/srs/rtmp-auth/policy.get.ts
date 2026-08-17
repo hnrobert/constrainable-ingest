@@ -15,7 +15,7 @@
 import { createError, getHeader, getQuery } from 'h3'
 import { env } from '../../../utils/env'
 import { EventsRepository } from '../../../repositories/events.repository'
-import { isKickBanned } from '../../../services/kick-bans'
+import { isBlocked } from '../../../services/stream-bans'
 
 export default defineEventHandler((event) => {
   if (getHeader(event, 'x-rtmp-auth') !== env.rtmpAuthToken) {
@@ -35,6 +35,10 @@ export default defineEventHandler((event) => {
     publishKey: !!row,
     requireAccountAuth: true, // account auth is mandatory for every event
     windowOpen: row?.status === 'archived' ? false : windowOpen,
-    banned: !!stream && isKickBanned(stream),
+    // Permanent ban (site-wide or this event) keyed by the publisher's
+    // account email — the gateway's synthesized stream name IS the email for
+    // authenticated publishers (all events require auth). ip- fallback names
+    // simply never match a ban.
+    banned: !!stream && isBlocked(stream, row?.id ?? null),
   }
 })
