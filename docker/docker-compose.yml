@@ -1,111 +1,69 @@
-# Single-machine intranet deployment: app + RTMP gateway + SRS, no TLS.
+# Full-stack compose: frontend (static) + backend (API) + Go media-node + SRS.
+# Each service can be selectively started via the compose:up:* scripts —
+# see package.json. All services share the `ingest` network and communicate
+# by service name (never host ports).
 #
-# Network model — everything possible stays on the isolated `ingest` bridge and
-# is reached by compose service name + container port:
-#   rtmp-gateway → http://app:31954/api/srs/rtmp-auth/* (auth) + rtmp://srs:1935
-#   (relay); app → http://srs:1985/api/v1 (API) + http://srs:8080 (same-origin
-#   FLV playback proxy) + rtmp://srs:1935 (recorder/monitor pull); srs →
-#   http://app:31954/api/srs/* (http_hooks).
-#
-# Only TWO host ports are published — the ones clients outside the network need:
-#   :31954  app          — browsers (SSR + API + Socket.IO + FLV playback proxy)
-#   :1935   rtmp-gateway — OBS RTMP ingest
-# SRS publishes NOTHING: browsers watch via the app's same-origin proxy, and all
-# server-side traffic rides the docker network. (For optional direct WebRTC/WHEP
-# playback, see the commented ports under `srs`.)
-#
-# RTMP ingress: the `rtmp-gateway` owns host :1935 and is OBS' front-door, on a
-# SINGLE URL (rtmp://host/live) for all events. It challenges every publisher
-# with the Adobe authmod dance (password never travels); clients without
-# credentials configured pass through openly. At publish, the gateway asks the
-# app whether the key's event requires account auth (per-event
-# requireAccountAuth) and rejects unauthenticated pushes, and authed publishers
-# must publish under their own account email. Users publishing with account auth
-# must have signed in at least once so the app has stored their authmod verifier.
+# Service topology:
+#   server     (Nuxt API + auth + Socket.IO + admin)  → the control plane
+#   media-node (Go RTMP front-door, ~8MB)             → connects to server via Socket.IO
+#   srs-media  (SRS with DVR recording, ~142MB)       → colocated with media-node
 services:
-  app:
+
+  # ── Backend: Nuxt API server (no SRS needed to run) ──
+  server:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: constrainable-ingest:latest
-    container_name: ingest-app
+    image: constrainable-ingest-server:latest
+    container_name: ingest-server
     environment:
       HOST: 0.0.0.0
       PORT: "31954"
       NODE_ENV: production
       TZ: ${TZ:-Asia/Shanghai}
-      # storage
       DB_PATH: /app/data/app.db
       RECORD_DIR: /app/records
-      # SRS endpoints (server-to-server via compose service name, NOT host ports)
-      SRS_API_BASE: http://srs:1985/api/v1
-      SRS_FLV_BASE: http://srs:8080
-      SRS_RTMP_HOST: srs
-      # browser-visible host (LAN/public IP) for playback URLs
       PUBLIC_HOST: ${PUBLIC_HOST:-127.0.0.1}
-      # binaries (installed in the image)
       FFMPEG_PATH: ffmpeg
       FFPROBE_PATH: ffprobe
-      # auth
       SESSION_SECRET: ${SESSION_SECRET:-changeme-change-me}
-      # AES-256-GCM key encrypting the stored authmod verifier (per-user)
       AUTHMOD_VERIFIER_SECRET: ${AUTHMOD_VERIFIER_SECRET:-change-me-to-a-long-random-string}
-      # shared secret guarding the internal salt/verify endpoints (app <-> gateway)
-      RTMP_AUTH_TOKEN: ${RTMP_AUTH_TOKEN:-change-me-to-a-long-random-string}
+      # MEDIA_NODE_AUTH_TOKEN: ${MEDIA_NODE_AUTH_TOKEN:-}  # empty = no auth
     volumes:
       - ../data:/app/data
       - ../records:/app/records
-    ports:
-      - "31954:31954"   # app + Socket.IO (same origin, /socket.io/)
     networks:
       - ingest
-    depends_on:
-      - srs
     restart: unless-stopped
 
-  # OBS pushes here. Owns host :1935 so contestants use portless rtmp://host/live.
-  # Verifies the publisher's website account, then relays to SRS (srs:1935).
-  rtmp-gateway:
+  # ── Go media-node: RTMP ingest front-door (~8MB, no HTTP) ──
+  media-node:
     build:
-      context: ../rtmp-gateway
+      context: ../media-node
       dockerfile: Dockerfile
-    image: constrainable-rtmp-gateway:latest
-    container_name: ingest-rtmp-gateway
+    image: constrainable-media-node:latest
+    container_name: ingest-media-node
     environment:
       TZ: ${TZ:-Asia/Shanghai}
-      RTMP_LISTEN: ":1935"
-      SRS_ADDR: "srs:1935"
-      APP_BASE: "http://app:31954"
-      RTMP_AUTH_TOKEN: ${RTMP_AUTH_TOKEN:-change-me-to-a-long-random-string}
+      NODE_ORIGIN: http://server:31954
+      SELF_ORIGIN: ${PUBLIC_HOST:-127.0.0.1}
+      MEDIA_NODE_AUTH_TOKEN: ${MEDIA_NODE_AUTH_TOKEN:-}
+      RTMP_PORT: "1935"
+      SRS_ADDR: localhost:1935
+      SRS_API_BASE: http://localhost:1985/api/v1
+      RECORD_DIR: /records
+      ALLOW_DIRECT_SRS: "false"
+    volumes:
+      - ./records-node:/records
     ports:
-      - "1935:1935"   # RTMP ingest (OBS) — the gateway is the public RTMP front-door
+      - "1935:1935"
     networks:
       - ingest
     depends_on:
-      - srs
+      - server
+
     restart: unless-stopped
 
-  srs:
-    image: ossrs/srs:6
-    container_name: ingest-srs
-    entrypoint: ["/bin/sh", "/srs-entrypoint.sh"]
-    environment:
-      TZ: ${TZ:-Asia/Shanghai}
-      # browser-reachable IP for WebRTC ICE candidate (the host's LAN/public IP);
-      # only relevant if the optional WebRTC ports below are published
-      SRS_RTC_CANDIDATE: ${PUBLIC_HOST:-127.0.0.1}
-    volumes:
-      - ./srs.conf:/srs.conf.template:ro
-      - ./srs-entrypoint.sh:/srs-entrypoint.sh:ro
-    # NOTHING is published by default — browsers watch through the app's
-    # same-origin FLV proxy, and all server traffic rides the `ingest` network.
-    # Optional: direct WebRTC (WHEP) playback from browsers needs these two:
-    # ports:
-    #   - "1985:1985"      # WHEP signaling (browser → SRS)
-    #   - "8000:8000/udp"  # WebRTC media
-    networks:
-      - ingest
-    restart: unless-stopped
 
 networks:
   ingest:

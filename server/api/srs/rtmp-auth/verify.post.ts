@@ -1,7 +1,7 @@
 /**
  * Internal RTMP-auth endpoint: the Go gateway asks the app to verify an Adobe
  * authmod `response` (stage 3). This is a password-equivalent oracle — gated by
- * the shared RTMP_AUTH_TOKEN header, never session auth, never public.
+ * the shared MEDIA_NODE_AUTH_TOKEN header, never session auth, never public.
  *
  * We decrypt the stored AES verifier (librtmp's `salted2` = base64(md5(email +
  * salt + password))) and run verifyResponse(): a constant-time compare of
@@ -17,7 +17,7 @@ import { UsersRepository } from '../../../repositories/users.repository'
 import { verifierFromCipher, verifyResponse } from '../../../utils/authmod'
 
 export default defineEventHandler(async (event) => {
-  if (getHeader(event, 'x-rtmp-auth') !== env.rtmpAuthToken) {
+  if (env.mediaNodeAuthToken !== '' && getHeader(event, 'x-rtmp-auth') !== env.mediaNodeAuthToken) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
   const body = await readBody<{ email?: string; opaque?: string; challenge?: string; response?: string }>(event)

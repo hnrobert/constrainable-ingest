@@ -2,7 +2,7 @@
 // object, ecma-array, strict-array). Decode returns plain Go values; encode uses
 // pre-encoded value bytes so object key order is deterministic (RTMP connect
 // commands are order-sensitive).
-package main
+package rtmp
 
 import (
 	"encoding/binary"
@@ -74,7 +74,7 @@ func (r *amfReader) object() map[string]interface{} {
 }
 
 // amfDecodeAll reads AMF0 values until the buffer is exhausted.
-func amfDecodeAll(b []byte) []interface{} {
+func AmfDecodeAll(b []byte) []interface{} {
 	r := &amfReader{b: b}
 	out := []interface{}{}
 	for r.i < len(r.b) {
@@ -123,7 +123,7 @@ func encObject(props []prop) []byte {
 // ---- command payloads ----
 
 // connect-OK: _result(txn) + server props + info{NetConnection.Connect.Success}.
-func cmdConnectOK(txn float64) []byte {
+func CmdConnectOK(txn float64) []byte {
 	out := encString("_result")
 	out = append(out, encNumber(txn)...)
 	out = append(out, encObject([]prop{
@@ -141,7 +141,7 @@ func cmdConnectOK(txn float64) []byte {
 }
 
 // _error with a free-form description — used for the authmod challenge/response.
-func cmdError(txn float64, desc string) []byte {
+func CmdError(txn float64, desc string) []byte {
 	out := encString("_error")
 	out = append(out, encNumber(txn)...)
 	out = append(out, encNull()...)
@@ -153,20 +153,20 @@ func cmdError(txn float64, desc string) []byte {
 	return out
 }
 
-func cmdCreateStreamResult(txn, sid float64) []byte {
+func CmdCreateStreamResult(txn, sid float64) []byte {
 	out := encString("_result")
 	out = append(out, encNumber(txn)...)
 	out = append(out, encNull()...)
 	return append(out, encNumber(sid)...)
 }
 
-func cmdResultEmpty(txn float64) []byte {
+func CmdResultEmpty(txn float64) []byte {
 	out := encString("_result")
 	out = append(out, encNumber(txn)...)
 	return append(out, encNull()...)
 }
 
-func cmdOnStatusPublishStart() []byte {
+func CmdOnStatusPublishStart() []byte {
 	out := encString("onStatus")
 	out = append(out, encNumber(0)...)
 	out = append(out, encNull()...)
@@ -180,7 +180,7 @@ func cmdOnStatusPublishStart() []byte {
 
 // onStatus with an error level/code — used to reject publishes that skipped the
 // auth path their event requires (per-event enforcement at publish time).
-func cmdOnStatusError(code, desc string) []byte {
+func CmdOnStatusError(code, desc string) []byte {
 	out := encString("onStatus")
 	out = append(out, encNumber(0)...)
 	out = append(out, encNull()...)
@@ -194,19 +194,19 @@ func cmdOnStatusError(code, desc string) []byte {
 
 // Upstream (gateway → SRS) client commands.
 
-func cmdConnect(app, tcURL string) []byte {
+func CmdConnect(app, tcURL string) []byte {
 	out := encString("connect")
 	out = append(out, encNumber(1)...) // txn 1
 	out = append(out, encObject([]prop{
 		{"app", encString(app)},
 		{"type", encString("nonprivate")},
-		{"flashVer", encString("FMLE/3.0 (compatible; rtmp-gateway)")},
+		{"flashVer", encString("FMLE/3.0 (compatible; media-node)")},
 		{"tcUrl", encString(tcURL)},
 	})...)
 	return append(out, encNull()...)
 }
 
-func cmdCreateStream() []byte {
+func CmdCreateStream() []byte {
 	out := encString("createStream")
 	out = append(out, encNumber(2)...)
 	return append(out, encNull()...)
@@ -215,7 +215,7 @@ func cmdCreateStream() []byte {
 // publish(streamName, "live") — the stream name is replayed verbatim from OBS so
 // SRS' on_publish hook sees the same "<email>?token=<publishKey>" and event auth
 // (authorizePublish) is unchanged.
-func cmdPublish(name string) []byte {
+func CmdPublish(name string) []byte {
 	out := encString("publish")
 	out = append(out, encNumber(0)...)
 	out = append(out, encNull()...)

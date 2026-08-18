@@ -12,7 +12,7 @@ import { UsersRepository } from '../../../repositories/users.repository'
 import { isSiteWideBanned } from '../../../services/stream-bans'
 
 export default defineEventHandler((event) => {
-  if (getHeader(event, 'x-rtmp-auth') !== env.rtmpAuthToken) {
+  if (env.mediaNodeAuthToken !== '' && getHeader(event, 'x-rtmp-auth') !== env.mediaNodeAuthToken) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
   const email = String(getQuery(event).email ?? '').trim().toLowerCase()

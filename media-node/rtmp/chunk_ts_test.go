@@ -1,4 +1,4 @@
-package main
+package rtmp
 
 // fmt-3 chunks opening NEW messages must advance ts by the last delta (spec),
 // not 0 — the regression made SRS reject relayed streams ("Queue input is
@@ -24,7 +24,7 @@ func TestFmt3NewMessageAdvancesTimestamp(t *testing.T) {
 	// read back with a reader whose chunkSize matches the writer
 	rd := &bytes.Reader{}
 	_ = rd
-	cr := newChunkReader(bytes.NewReader(buf.Bytes()))
+	cr := NewChunkReader(bytes.NewReader(buf.Bytes()))
 	cr.chunkSize = 128
 	var got []uint32
 	for i := 0; i < 3; i++ {

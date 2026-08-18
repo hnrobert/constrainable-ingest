@@ -1,13 +1,14 @@
 /**
- * Same-origin FLV playback proxy. Pipes SRS's HTTP-FLV remux through the app at
- * /api/streams/live/<streamName> so the browser pulls media from the SAME
- * origin it loaded the page from — no CORS, no dependency on PUBLIC_HOST/SRS
- * ports being reachable from the viewer's machine (the old direct URLs broke
- * for anyone not on the SRS host). Admin-only, like all live monitoring; the
- * session cookie rides along automatically on the same-origin request.
+ * Same-origin FLV playback proxy. Admin browsers pull live streams through the
+ * backend at /api/streams/live/<streamName> — same origin as the dashboard, so
+ * JWT auth works, no CORS, and no dependency on media-node SRS ports being
+ * reachable from the viewer's machine.
  *
- * WebRTC (WHEP) is NOT proxied — its media flows peer-to-peer to SRS and only
- * the signaling could be forwarded, so the WHEP URL stays direct.
+ * Routing: currently proxies from the local SRS (env.srsFlvBase). Multi-node
+ * routing (proxy from the hosting media-node's SRS) will use the stream →
+ * nodeId mapping tracked by media-node events — the interface is ready below.
+ *
+ * Admin-only. WebRTC (WHEP) is NOT proxied — its media flows peer-to-peer.
  */
 import { createError, getRouterParam, sendStream } from 'h3'
 import { Readable } from 'node:stream'

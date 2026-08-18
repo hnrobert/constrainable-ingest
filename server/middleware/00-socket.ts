@@ -15,6 +15,7 @@
 import type http from 'node:http'
 import { Server as SocketIOServer } from 'socket.io'
 import { onBus } from '../utils/bus'
+import { wireMediaNodeNamespace } from '../services/media-node-events'
 import type { BusEventMap, BusEventName } from '#shared/events'
 
 const SOCKET_PATH = '/socket'
@@ -73,5 +74,8 @@ export default defineEventHandler((event) => {
   server.__socketIoAttached = true
   server.__io = io
   wire(io)
-  console.log('[socket.io] attached to HTTP server (same origin, /socket/)')
+  // /media-nodes namespace: Go media-node backends connect here to register,
+  // request publish authorization, and report session events.
+  wireMediaNodeNamespace(io)
+  console.log('[socket.io] attached to HTTP server (same origin, /socket/ + /media-nodes)')
 })

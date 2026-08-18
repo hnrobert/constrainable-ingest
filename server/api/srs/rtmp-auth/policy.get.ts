@@ -18,7 +18,7 @@ import { EventsRepository } from '../../../repositories/events.repository'
 import { isBlocked } from '../../../services/stream-bans'
 
 export default defineEventHandler((event) => {
-  if (getHeader(event, 'x-rtmp-auth') !== env.rtmpAuthToken) {
+  if (env.mediaNodeAuthToken !== '' && getHeader(event, 'x-rtmp-auth') !== env.mediaNodeAuthToken) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
   const token = String(getQuery(event).token ?? '')

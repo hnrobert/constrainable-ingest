@@ -1,24 +1,16 @@
-# Hybrid dev override: expose SRS RTMP on host :11935 so the host-run gateway
-# (go run ./rtmp-gateway, owning dev :1935) can relay to it. This lets OBS use the
-# portless `rtmp://localhost/live` against the dev gateway. http_hooks point at
-# the HOST-run dev app via host.docker.internal (already in nuxt vite allowedHosts).
-# Bring up SRS only:
+# Dev override: expose SRS ports on the host so the host-run media-node
+# (go run ./media-node, owning dev :1935) and dev app (bun run dev) can reach it.
+# The base compose runs SRS as "srs-media" (paired with the Go media-node).
 #
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up srs
-#   RTMP_LISTEN=:1935 SRS_ADDR=localhost:11935 APP_BASE=http://localhost:31954 \
-#     RTMP_AUTH_TOKEN=dev-insecure-rtmp-token go run ./rtmp-gateway
-#   bun run dev --port 31954   # with RTMP_AUTH_TOKEN + SRS_RTMP_HOST=127.0.0.1:11935
+#   bun run compose:up:srs      # start SRS with host port mappings
+#   bun run gateway              # start media-node on host :1935
+#   bun run dev                  # start the Node app on :31954
 #
-# The base file publishes NO srs ports (production hardening), so this plain
-# `ports:` block simply adds the dev mappings — no `!override` tag needed.
+# Port remaps avoid conflicts with other dev tools that squat :1935/:8080.
 services:
-  srs:
-    environment:
-      # http_hooks → the host-run dev app (Vite/Nitro on :31954), not the app container
-      BACKEND: "host.docker.internal:31954"
+  srs-media:
     ports:
-      - "11935:1935"   # SRS RTMP, remapped off 1935 so the dev gateway can own :1935
-      - "1985:1985"   # HTTP API + WHEP
-      - "18080:8080"   # HTTP-FLV, remapped off 8080 (the host's :8080 is commonly
-                       # taken by other dev projects, which silently breaks SRS_FLV_BASE)
+      - "11935:1935"   # SRS RTMP, remapped off 1935 so the dev media-node can own :1935
+      - "1985:1985"   # HTTP API
+      - "18080:8080"   # HTTP-FLV, remapped off 8080 (host :8080 often taken)
       - "8000:8000/udp" # WebRTC

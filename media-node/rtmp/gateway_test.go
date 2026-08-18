@@ -1,4 +1,4 @@
-package main
+package rtmp
 
 // End-to-end auth test: a fake librtmp client performs the 3-connection Adobe
 // authmod dance against the gateway, which calls a mock app exposing the same
@@ -6,6 +6,8 @@ package main
 // the full auth path (handshake → stage 1/2/3 → verify) without OBS.
 
 import (
+	"bytes"
+	"encoding/json"
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/base64"
@@ -35,7 +37,7 @@ func startGateway(t *testing.T, appBase, token string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := newAppClient(appBase, token)
+	app := NewTestAppClient(appBase, token)
 	go func() {
 		for {
 			c, err := ln.Accept()
@@ -44,7 +46,7 @@ func startGateway(t *testing.T, appBase, token string) string {
 			}
 			go func() {
 				defer func() { _ = recover(); _ = c.Close() }()
-				handleOBS(c, app)
+				HandleOBS(c, app)
 			}()
 		}
 	}()
@@ -59,17 +61,17 @@ func openClient(t *testing.T, addr string) (net.Conn, *chunkWriter, *chunkReader
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := clientHandshake(c); err != nil {
+	if err := ClientHandshake(c); err != nil {
 		t.Fatal(err)
 	}
-	cw := newChunkWriter(c)
-	cr := newChunkReader(c)
-	_ = cw.WriteMessage(&Message{Type: 1, CSID: 2, Payload: putBe4(4096)})
+	cw := NewChunkWriter(c)
+	cr := NewChunkReader(c)
+	_ = cw.WriteMessage(&Message{Type: 1, CSID: 2, Payload: PutBE4(4096)})
 	return c, cw, cr
 }
 
 func sendConnect(cw *chunkWriter, app string) {
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdConnect(app, "rtmp://test/live")})
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: CmdConnect(app, "rtmp://test/live")})
 }
 
 // cmdField reads the gateway's next command and returns a combined string of the
@@ -81,14 +83,14 @@ func cmdField(cr *chunkReader) string {
 			return "ERR:" + err.Error()
 		}
 		if m.Type == 1 {
-			cr.chunkSize = int(be32(m.Payload))
+			cr.chunkSize = int(BE32(m.Payload))
 			continue
 		}
 		if m.Type != 20 && m.Type != 17 {
 			continue
 		}
 		var parts []string
-		for _, v := range amfDecodeAll(m.Payload) {
+		for _, v := range AmfDecodeAll(m.Payload) {
 			if o, ok := v.(map[string]interface{}); ok {
 				if d, _ := o["description"].(string); d != "" {
 					parts = append(parts, d)
@@ -317,7 +319,7 @@ func TestCredlessClientPassesThrough(t *testing.T) {
 
 	c, cw, cr := credlessConnect(t, addr)
 	defer c.Close()
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdCreateStream()})
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: CmdCreateStream()})
 	if got := nextCmdName(cr); got != "_result" {
 		t.Fatalf("credless createStream: expected _result, got %q", got)
 	}
@@ -333,7 +335,7 @@ func nextCmdName(cr *chunkReader) string {
 		if m.Type != 20 && m.Type != 17 {
 			continue
 		}
-		vals := amfDecodeAll(m.Payload)
+		vals := AmfDecodeAll(m.Payload)
 		if len(vals) > 0 {
 			if s, ok := vals[0].(string); ok {
 				return s
@@ -360,28 +362,28 @@ func fakeSRS(t *testing.T, names chan<- string) string {
 			}
 			go func() {
 				defer func() { _ = recover(); _ = c.Close() }()
-				if err := serverHandshake(c); err != nil {
+				if err := ServerHandshake(c); err != nil {
 					return
 				}
-				cw := newChunkWriter(c)
-				cr := newChunkReader(c)
+				cw := NewChunkWriter(c)
+				cr := NewChunkReader(c)
 				// Announce our chunk size like real SRS does — without this the
 				// gateway's reader stays at its 128-byte default and misframes
 				// our larger command replies.
-				_ = cw.WriteMessage(&Message{Type: 1, CSID: 2, Payload: putBe4(4096)})
+				_ = cw.WriteMessage(&Message{Type: 1, CSID: 2, Payload: PutBE4(4096)})
 				for {
 					m, err := cr.ReadMessage()
 					if err != nil {
 						return
 					}
 					if m.Type == 1 {
-						cr.chunkSize = int(be32(m.Payload))
+						cr.chunkSize = int(BE32(m.Payload))
 						continue
 					}
 					if m.Type != 20 && m.Type != 17 {
 						continue
 					}
-					vals := amfDecodeAll(m.Payload)
+					vals := AmfDecodeAll(m.Payload)
 					if len(vals) == 0 {
 						continue
 					}
@@ -392,9 +394,9 @@ func fakeSRS(t *testing.T, names chan<- string) string {
 					}
 					switch cmd {
 					case "connect":
-						_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdConnectOK(txn)})
+						_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: CmdConnectOK(txn)})
 					case "createStream":
-						_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdCreateStreamResult(txn, 1)})
+						_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: CmdCreateStreamResult(txn, 1)})
 					case "publish":
 						if len(vals) >= 4 {
 							n, _ := vals[3].(string)
@@ -403,7 +405,7 @@ func fakeSRS(t *testing.T, names chan<- string) string {
 							default:
 							}
 						}
-						_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusPublishStart()})
+						_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: CmdOnStatusPublishStart()})
 						return
 					}
 				}
@@ -444,13 +446,13 @@ func TestPublishPolicyEnforcement(t *testing.T) {
 	addr := startGateway(t, app.URL, token)
 
 	names := make(chan string, 8)
-	oldSRS := cfgSRSAddr
-	cfgSRSAddr = fakeSRS(t, names)
-	defer func() { cfgSRSAddr = oldSRS }()
+	oldSRS := SRSAddr
+	SRSAddr = fakeSRS(t, names)
+	defer func() { SRSAddr = oldSRS }()
 
 	// 1) credless connection + bare auth-requiring key → rejected
 	c, cw, cr := credlessConnect(t, addr)
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish(authKey)})
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: CmdPublish(authKey)})
 	if got := cmdField(cr); !strings.Contains(got, "NetStream.Publish.BadName") {
 		c.Close()
 		t.Fatalf("auth key, credless conn: expected BadName rejection, got %q", got)
@@ -460,7 +462,7 @@ func TestPublishPolicyEnforcement(t *testing.T) {
 	// 1c) window-closed key (even AUTHED) → BadName "window closed" — OBS stops
 	// instead of retry-looping
 	c, cw, cr = danceAuth(t, addr, user, password)
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish("closedkey1")})
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: CmdPublish("closedkey1")})
 	if got := cmdField(cr); !strings.Contains(got, "streaming window is closed") {
 		c.Close()
 		t.Fatalf("closed-window key: expected window-closed BadName, got %q", got)
@@ -470,13 +472,13 @@ func TestPublishPolicyEnforcement(t *testing.T) {
 
 	// 2) authed publisher + bare auth key → upstream name = the authed email
 	c, cw, cr = danceAuth(t, addr, user, password)
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish(authKey)})
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: CmdPublish(authKey)})
 	expectName(t, names, "robert@example.com?token="+authKey)
 	c.Close()
 
 	// 3) authed publisher under ANOTHER user's explicit name → rejected
 	c, cw, cr = danceAuth(t, addr, user, password)
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish("victim@example.com?token=" + authKey)})
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: CmdPublish("victim@example.com?token=" + authKey)})
 	if got := cmdField(cr); !strings.Contains(got, "NetStream.Publish.BadName") {
 		c.Close()
 		t.Fatalf("impersonation: expected BadName rejection, got %q", got)
@@ -485,19 +487,19 @@ func TestPublishPolicyEnforcement(t *testing.T) {
 
 	// 4) credless connection + bare no-auth key → upstream name from client IP
 	c, cw, cr = credlessConnect(t, addr)
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish(openKey)})
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: CmdPublish(openKey)})
 	expectName(t, names, "ip-127.0.0.1?token="+openKey)
 	c.Close()
 
 	// 5) credless connection + explicit name on a no-auth key → honored verbatim
 	c, cw, cr = credlessConnect(t, addr)
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish("alice?token=" + openKey)})
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: CmdPublish("alice?token=" + openKey)})
 	expectName(t, names, "alice?token="+openKey)
 	c.Close()
 
 	// 6) unknown token (wrong event key) → immediate BadName, nothing relayed
 	c, cw, cr = credlessConnect(t, addr)
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish("studentkey0001")})
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: CmdPublish("studentkey0001")})
 	if got := cmdField(cr); !strings.Contains(got, "unknown event key") {
 		c.Close()
 		t.Fatalf("unknown token: expected unknown-event-key BadName, got %q", got)
@@ -506,7 +508,7 @@ func TestPublishPolicyEnforcement(t *testing.T) {
 
 	// 7) banned stream name (recently kicked) → BadName, nothing relayed
 	c, cw, cr = danceAuth(t, addr, user, password)
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish("banned@example.com?token=" + openKey)})
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: CmdPublish("banned@example.com?token=" + openKey)})
 	if got := cmdField(cr); !strings.Contains(got, "disconnected by the organizer") {
 		c.Close()
 		t.Fatalf("banned stream: expected kick BadName, got %q", got)
@@ -515,7 +517,7 @@ func TestPublishPolicyEnforcement(t *testing.T) {
 
 	// 8) unknown-user (placeholder creds) + no-auth key → accepted, ip-name stream
 	c, cw, cr = danceUnknownUser(t, addr, "placeholder@nowhere.dev")
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: cmdPublish(openKey)})
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, StreamID: 1, Payload: CmdPublish(openKey)})
 	expectName(t, names, "ip-127.0.0.1?token="+openKey)
 	c.Close()
 	_ = cr
@@ -564,5 +566,78 @@ func TestStage2BanRefusesConnection(t *testing.T) {
 	sendConnect(cw, "live?authmod=adobe&user=banned@x.com")
 	if got := cmdField(cr); !strings.Contains(got, "reason=authfailed") {
 		t.Fatalf("banned user stage2: expected fatal authfailed, got %q", got)
+	}
+}
+
+// NewTestAppClient creates a real HTTP AppClient pointed at the test mock server.
+func NewTestAppClient(baseURL, token string) AppClient {
+	return NewHTTPAuthClient(baseURL, token)
+}
+
+// NewHTTPAuthClient is a minimal HTTP auth client for the rtmp package's tests.
+// In production, api.AuthClient (in the api package) serves this role.
+func NewHTTPAuthClient(base, token string) *httpAuthClient {
+	return &httpAuthClient{base: base, token: token}
+}
+
+type httpAuthClient struct {
+	base  string
+	token string
+}
+
+func (h *httpAuthClient) Salt(email string) SaltResult {
+	req, _ := http.NewRequest("GET", h.base+"/api/srs/rtmp-auth/salt?email="+email, nil)
+	req.Header.Set("x-rtmp-auth", h.token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		return SaltResult{Salt: RandHex(8)}
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Salt   string `json:"salt"`
+		Banned bool   `json:"banned"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	return SaltResult{Salt: body.Salt, Banned: body.Banned}
+}
+
+func (h *httpAuthClient) Verify(email, opaque, challenge, response string) VerifyResult {
+	body, _ := json.Marshal(map[string]string{
+		"email": email, "opaque": opaque, "challenge": challenge, "response": response,
+	})
+	req, _ := http.NewRequest("POST", h.base+"/api/srs/rtmp-auth/verify", bytes.NewReader(body))
+	req.Header.Set("content-type", "application/json")
+	req.Header.Set("x-rtmp-auth", h.token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		return VerifyResult{}
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Allow bool `json:"allow"`
+		Known bool `json:"known"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return VerifyResult{Allow: out.Allow, Known: out.Known}
+}
+
+func (h *httpAuthClient) Policy(token, stream string) PolicyResult {
+	req, _ := http.NewRequest("GET", h.base+"/api/srs/rtmp-auth/policy?token="+token+"&stream="+stream, nil)
+	req.Header.Set("x-rtmp-auth", h.token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		return PolicyResult{}
+	}
+	defer resp.Body.Close()
+	var out struct {
+		PublishKey         bool `json:"publishKey"`
+		RequireAccountAuth bool `json:"requireAccountAuth"`
+		WindowOpen         bool `json:"windowOpen"`
+		Banned             bool `json:"banned"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return PolicyResult{
+		PublishKey: out.PublishKey, RequireAccountAuth: out.RequireAccountAuth,
+		WindowOpen: out.WindowOpen, Banned: out.Banned,
 	}
 }

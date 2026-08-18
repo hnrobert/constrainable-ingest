@@ -18,8 +18,11 @@ export const env = {
 
   /** AES-256-GCM key for at-rest secrets (RTMP authmod verifier, etc.). */
   verifierSecret: process.env.AUTHMOD_VERIFIER_SECRET || 'dev-insecure-secret-change-me',
-  /** Shared secret guarding internal RTMP-auth endpoints (app ↔ RTMP gateway). */
-  rtmpAuthToken: process.env.RTMP_AUTH_TOKEN || 'dev-insecure-rtmp-token',
+  /**
+   * Shared secret for media-node socket connections + internal endpoints.
+   * Empty string = NO auth (any media node can connect). Set in production.
+   */
+  mediaNodeAuthToken: process.env.MEDIA_NODE_AUTH_TOKEN || '',
 
   /** SRS HTTP API base (server-to-server) */
   srsApiBase: process.env.SRS_API_BASE || 'http://127.0.0.1:1985/api/v1',

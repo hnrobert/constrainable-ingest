@@ -12,7 +12,7 @@
 // Run:  CAPTURE=1 RTMP_LISTEN=:11935 go run ./rtmp-gateway
 // Then in OBS: Server rtmp://localhost:11935/live, Stream key anything,
 // Use authentication ON, Username/Password set, Start Streaming.
-package main
+package rtmp
 
 import (
 	"encoding/json"
@@ -54,9 +54,9 @@ func handleCapture(conn net.Conn) {
 		return
 	}
 
-	cw := newChunkWriter(conn)
-	cr := newChunkReader(conn)
-	_ = cw.WriteMessage(&Message{Type: 1, CSID: 2, Payload: putBe4(4096)}) // our chunk size
+	cw := NewChunkWriter(conn)
+	cr := NewChunkReader(conn)
+	_ = cw.WriteMessage(&Message{Type: 1, CSID: 2, Payload: PutBE4(4096)}) // our chunk size
 
 	for n := 0; n < 24; n++ {
 		_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
@@ -69,7 +69,7 @@ func handleCapture(conn net.Conn) {
 		// our 128-byte default gets misframed into garbage (OBS announces a large
 		// chunk size right after the handshake; the reader must honor it).
 		if msg.Type == 1 {
-			cr.chunkSize = int(be32(msg.Payload))
+			cr.chunkSize = int(BE32(msg.Payload))
 			log.Printf("    (SetChunkSize → %d)", cr.chunkSize)
 			continue
 		}
@@ -79,7 +79,7 @@ func handleCapture(conn net.Conn) {
 			log.Printf("    (msg type=%d csid=%d len=%d — not a command, skipped)", msg.Type, msg.CSID, len(msg.Payload))
 			continue
 		}
-		vals := amfDecodeAll(msg.Payload)
+		vals := AmfDecodeAll(msg.Payload)
 		if len(vals) == 0 {
 			continue
 		}
@@ -94,10 +94,10 @@ func handleCapture(conn net.Conn) {
 		}
 		if cmd == "connect" {
 			// Acknowledge connect minimally so OBS proceeds to publish (NO challenge).
-			_ = cw.WriteMessage(&Message{Type: 5, CSID: 2, Payload: putBe4(2500000)})               // window ack size
-			_ = cw.WriteMessage(&Message{Type: 6, CSID: 2, Payload: append(putBe4(2500000), 0x02)}) // peer bandwidth (dynamic)
+			_ = cw.WriteMessage(&Message{Type: 5, CSID: 2, Payload: PutBE4(2500000)})               // window ack size
+			_ = cw.WriteMessage(&Message{Type: 6, CSID: 2, Payload: append(PutBE4(2500000), 0x02)}) // peer bandwidth (dynamic)
 			_ = cw.WriteMessage(&Message{Type: 4, CSID: 2, Payload: []byte{0, 0, 0, 0, 0, 0}})      // StreamBegin msid 0
-			_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdConnectOK(txn)})
+			_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: CmdConnectOK(txn)})
 			log.Printf("    (sent Connect.Success with NO challenge — watching what OBS does next)")
 		}
 		if cmd == "publish" {
@@ -112,7 +112,7 @@ func handleCapture(conn net.Conn) {
 func captureHandshake(c net.Conn, remote string) error {
 	_ = c.SetReadDeadline(time.Now().Add(8 * time.Second))
 
-	c0, err := readN(c, 1)
+	c0, err := ReadN(c, 1)
 	if err != nil {
 		return fmt.Errorf("read C0 (OBS sent nothing?): %w", err)
 	}
@@ -121,11 +121,11 @@ func captureHandshake(c net.Conn, remote string) error {
 		return fmt.Errorf("C0 version %d != 3", c0[0])
 	}
 
-	c1, err := readN(c, 1536)
+	c1, err := ReadN(c, 1536)
 	if err != nil {
 		return fmt.Errorf("read C1: %w", err)
 	}
-	log.Printf("%s hs: C1 ok — client time=%d, first16=% x", remote, be32(c1[0:4]), c1[:16])
+	log.Printf("%s hs: C1 ok — client time=%d, first16=% x", remote, BE32(c1[0:4]), c1[:16])
 
 	s1 := make([]byte, 1536)
 	copy(s1[4:8], c1[0:4])
@@ -135,7 +135,7 @@ func captureHandshake(c net.Conn, remote string) error {
 	}
 	log.Printf("%s hs: sent S0+S1+S2 (%d bytes)", remote, len(resp))
 
-	c2, err := readN(c, 1536)
+	c2, err := ReadN(c, 1536)
 	if err != nil {
 		return fmt.Errorf("read C2 — OBS did not echo back (likely rejected our S0S1S2): %w", err)
 	}

@@ -21,30 +21,63 @@
 // known): the gateway asks the app (GET /policy) whether the key's event
 // requires account auth; unauthenticated pushes are rejected, and an authed
 // publisher must publish under their OWN account email (no impersonation).
-package main
+package rtmp
 
 import (
+	crand "crypto/rand"
+
+	"media-node/node"
+	"fmt"
 	"log"
 	"net"
 	"strings"
 )
 
-func handleOBS(conn net.Conn, app *appClient) {
+// AppClient abstracts the auth calls the RTMP handler needs (salt/verify/policy).
+// Implemented by api.AuthClient.
+type AppClient interface {
+	Salt(email string) SaltResult
+	Verify(email, opaque, challenge, response string) VerifyResult
+	Policy(token, stream string) PolicyResult
+}
+
+// Auth result types are aliases to the node package's socket-based types.
+type SaltResult = node.SaltResult
+type VerifyResult = node.VerifyResult
+type PolicyResult = node.PolicyResult
+
+// SRSAddr is the colocated SRS RTMP relay target (set from config at startup).
+var SRSAddr = "localhost:1935"
+
+// RandHex returns a query-safe random hex string.
+func RandHex(n int) string {
+	b := make([]byte, n)
+	if _, err := crand.Read(b); err != nil {
+		for i := range b {
+			b[i] = byte(i * 31 % 256)
+		}
+	}
+	return fmt.Sprintf("%x", b)
+}
+
+
+
+func HandleOBS(conn net.Conn, app AppClient) {
 	remote := conn.RemoteAddr().String()
 	log.Printf("=== connection from %s ===", remote)
 
-	if err := serverHandshake(conn); err != nil {
+	if err := ServerHandshake(conn); err != nil {
 		log.Printf("%s handshake: %v", remote, err)
 		return
 	}
-	cw := newChunkWriter(conn)
-	cr := newChunkReader(conn)
-	_ = cw.WriteMessage(&Message{Type: 1, CSID: 2, Payload: putBe4(4096)}) // our chunk size
+	cw := NewChunkWriter(conn)
+	cr := NewChunkReader(conn)
+	_ = cw.WriteMessage(&Message{Type: 1, CSID: 2, Payload: PutBE4(4096)}) // our chunk size
 
 	sawConnect := false
 	authed := false  // true only after a successful authmod verify (stage 3)
 	authedUser := "" // the email that was verified (must match the stream name)
-	var up *upstream
+	var up *Upstream
 	bytesIn := 0 // total payload bytes received from OBS (for acknowledgements)
 	lastAck := 0
 	for {
@@ -61,28 +94,28 @@ func handleOBS(conn net.Conn, app *appClient) {
 		bytesIn += len(msg.Payload)
 		if bytesIn-lastAck >= 2500000 {
 			lastAck = bytesIn
-			_ = cw.WriteMessage(&Message{Type: 3, CSID: 2, Payload: putBe4(uint32(bytesIn))})
+			_ = cw.WriteMessage(&Message{Type: 3, CSID: 2, Payload: PutBE4(uint32(bytesIn))})
 		}
 
 		switch msg.Type {
 		case 1: // SetChunkSize from OBS
-			cr.chunkSize = int(be32(msg.Payload))
+			cr.chunkSize = int(BE32(msg.Payload))
 
 		case 8, 9, 18: // audio / video / script data → forward to SRS
 			if up != nil {
-				if err := up.writeFrame(msg); err != nil {
+				if err := up.WriteFrame(msg); err != nil {
 					// Upstream is gone — tear the OBS connection down too,
 					// immediately. Keeping it half-alive leaves OBS showing
 					// "live" while frames vanish, and makes Stop hang.
 					log.Printf("%s upstream write failed: %v — closing OBS connection", remote, err)
-					up.close()
+					up.Close()
 					conn.Close()
 					return
 				}
 			}
 
 		case 20, 17: // AMF0 / AMF3 command
-			vals := amfDecodeAll(msg.Payload)
+			vals := AmfDecodeAll(msg.Payload)
 			if len(vals) == 0 {
 				continue
 			}
@@ -98,8 +131,8 @@ func handleOBS(conn net.Conn, app *appClient) {
 					continue
 				}
 				sawConnect = true
-				appField := appFromConnect(vals)
-				qs := parseApp(appField)
+				appField := AppFromConnect(vals)
+				qs := ParseApp(appField)
 
 				if _, ok := qs["response"]; ok {
 					// ---- STAGE 3: verify. A WRONG PASSWORD on a real account is
@@ -110,18 +143,18 @@ func handleOBS(conn net.Conn, app *appClient) {
 					// any non-empty placeholder login; per-event enforcement then
 					// happens at publish via the policy check. ----
 					user := qs["user"]
-					v := app.verify(user, qs["opaque"], qs["challenge"], qs["response"])
+					v := app.Verify(user, qs["opaque"], qs["challenge"], qs["response"])
 					if v.Allow {
 						authed = true
 						authedUser = user
-						sendConnectResult(cw, txn)
+						SendConnectResult(cw, txn)
 						log.Printf("%s [stage3] user=%s verify=true → connect success (authed)", remote, user)
 					} else if v.Known {
 						log.Printf("%s [stage3] user=%s verify=false (known user, wrong password) → refusing connection", remote, user)
-						_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdError(txn, "?reason=authfailed&authmod=adobe&user="+user)})
+						_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: CmdError(txn, "?reason=authfailed&authmod=adobe&user="+user)})
 						return
 					} else {
-						sendConnectResult(cw, txn)
+						SendConnectResult(cw, txn)
 						log.Printf("%s [stage3] user=%s verify=false (unknown user — placeholder creds, accepted unauthenticated)", remote, user)
 					}
 
@@ -132,35 +165,35 @@ func handleOBS(conn net.Conn, app *appClient) {
 						// never answers the challenge without credentials) may
 						// reconnect like this. Accept openly; auth-requiring
 						// events are still rejected at publish via policy. ----
-						sendConnectResult(cw, txn)
+						SendConnectResult(cw, txn)
 						log.Printf("%s --> connect success (no credentials, open)", remote)
 					} else {
 						// ---- STAGE 2: send the salt + opaque challenge ----
-						s := app.salt(user) // real salt, or random if unknown
+						s := app.Salt(user) // real salt, or random if unknown
 						if s.Banned {
 							// Recently kicked: refuse the CONNECT with the fatal
 							// auth error — same terminal form as a wrong password,
 							// so OBS stops reconnecting instead of looping.
 							log.Printf("%s [stage2] user=%s is kick-banned → refusing connection", remote, user)
-							_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdError(txn, "?reason=authfailed&authmod=adobe&user="+user)})
+							_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: CmdError(txn, "?reason=authfailed&authmod=adobe&user="+user)})
 							return
 						}
-						opaque := randHex(16)
+						opaque := RandHex(16)
 						desc := "?reason=needauth&authmod=adobe&user=" + user + "&salt=" + s.Salt + "&opaque=" + opaque
-						_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdError(txn, desc)})
+						_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: CmdError(txn, desc)})
 						log.Printf("%s [stage2] user=%s sent salt challenge", remote, user)
 						return // close; OBS reconnects for stage 3
 					}
 
 				} else {
 					// ---- STAGE 1: fresh connect → demand authmod ----
-					_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdError(txn, "authmod=adobe&code=403 need auth")})
+					_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: CmdError(txn, "authmod=adobe&code=403 need auth")})
 					log.Printf("%s [stage1] demanded authmod=adobe", remote)
 					return
 				}
 
 			case "createStream":
-				_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdCreateStreamResult(txn, 1)})
+				_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: CmdCreateStreamResult(txn, 1)})
 
 			case "publish":
 				name := ""
@@ -183,7 +216,7 @@ func handleOBS(conn net.Conn, app *appClient) {
 				if i := strings.Index(name, "?"); i >= 0 {
 					explicit = name[:i]
 				}
-				token := parseApp(name)["token"]
+				token := ParseApp(name)["token"]
 				if token == "" && explicit != "" {
 					token = explicit // bare publish-key form
 					explicit = ""
@@ -197,32 +230,32 @@ func handleOBS(conn net.Conn, app *appClient) {
 					if authed {
 						candidate = authedUser
 					} else {
-						candidate = ipStreamName(remote)
+						candidate = IpStreamName(remote)
 					}
 				}
-				candidate = safeStreamName(candidate)
-				pol := app.policy(token, candidate)
+				candidate = SafeStreamName(candidate)
+				pol := app.Policy(token, candidate)
 				if !pol.PublishKey {
 					// Unknown token = wrong event key. The per-student/per-token
 					// verbatim-relay paths are gone from the product, so refuse
 					// immediately (auth-error form) instead of relaying into a
 					// silent SRS rejection and an OBS connect-drop loop.
 					log.Printf("%s publish '%s' rejected: unknown event key", remote, name)
-					_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
+					_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: CmdOnStatusError(
 						"NetStream.Publish.BadName",
 						"Authentication failed: unknown event key. Check the stream key (the event key shown on your guide page).")})
 					return
 				}
 				if pol.Banned {
 					log.Printf("%s publish '%s' rejected: stream was kicked by an admin", remote, name)
-					_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
+					_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: CmdOnStatusError(
 						"NetStream.Publish.BadName",
 						"Authentication failed: you were disconnected by the organizer.")})
 					return
 				}
 				if !pol.WindowOpen {
 					log.Printf("%s publish '%s' rejected: event window closed", remote, name)
-					_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
+					_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: CmdOnStatusError(
 						"NetStream.Publish.BadName",
 						"Authentication failed: this event's streaming window is closed (not started or already ended).")})
 					return
@@ -231,32 +264,32 @@ func handleOBS(conn net.Conn, app *appClient) {
 				if pol.RequireAccountAuth {
 					if !authed {
 						log.Printf("%s publish '%s' rejected: event requires account auth", remote, name)
-						_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
+						_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: CmdOnStatusError(
 							"NetStream.Publish.BadName",
 							"Authentication failed: this event requires your account email and password in OBS' 'Use authentication' fields.")})
 						return
 					}
 					if explicit != "" && !strings.EqualFold(authedUser, explicit) {
 						log.Printf("%s publish '%s' rejected: authed as %s, stream name is %s", remote, name, authedUser, explicit)
-						_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusError(
+						_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: CmdOnStatusError(
 							"NetStream.Publish.BadName",
 							"Authentication failed: stream name must be your own account email ("+authedUser+").")})
 						return
 					}
 				}
 				if final == "" {
-					final = "anon-" + randHex(4)
+					final = "anon-" + RandHex(4)
 				}
-				rewritten := safeStreamName(final) + "?token=" + token
+				rewritten := SafeStreamName(final) + "?token=" + token
 				log.Printf("%s publish key '%s' → stream '%s'", remote, token, rewritten)
 				name = rewritten
-				u, err := dialUpstream(cfgSRSAddr)
+				u, err := DialUpstream(SRSAddr)
 				if err != nil {
 					log.Printf("%s upstream dial failed: %v", remote, err)
 					return
 				}
-				if err := u.publish(name); err != nil {
-					u.close()
+				if err := u.Publish(name); err != nil {
+					u.Close()
 					log.Printf("%s upstream publish failed: %v", remote, err)
 					return
 				}
@@ -264,23 +297,23 @@ func handleOBS(conn net.Conn, app *appClient) {
 				// Drain SRS→gateway messages; when SRS closes the upstream (or we
 				// do), close the OBS connection too — no zombie half-live state.
 				go func() {
-					u.drain(remote)
+					u.Drain(remote)
 					log.Printf("%s upstream gone — closing OBS connection", remote)
 					conn.Close()
 				}()
 				// StreamBegin(msid 1) — standard server signal that accompanies
 				// Publish.Start.
-				_ = cw.WriteMessage(&Message{Type: 4, CSID: 2, Payload: append([]byte{0, 0}, putBe4(1)...)})
-				_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: cmdOnStatusPublishStart()})
-				log.Printf("%s publishing '%s' (authed=%v) -> %s", remote, name, authed, cfgSRSAddr)
+				_ = cw.WriteMessage(&Message{Type: 4, CSID: 2, Payload: append([]byte{0, 0}, PutBE4(1)...)})
+				_ = cw.WriteMessage(&Message{Type: 20, CSID: 5, StreamID: 1, Payload: CmdOnStatusPublishStart()})
+				log.Printf("%s publishing '%s' (authed=%v) -> %s", remote, name, authed, SRSAddr)
 
 			case "@setDataFrame": // onMetaData — forward to SRS as-is
 				if up != nil {
-					_ = up.writeFrame(msg)
+					_ = up.WriteFrame(msg)
 				}
 
 			case "releaseStream", "FCPublish", "FCUnpublish", "deleteStream", "_checkbw":
-				_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdResultEmpty(txn)})
+				_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: CmdResultEmpty(txn)})
 
 			default:
 				log.Printf("%s cmd '%s' (txn %v) — unhandled", remote, cmd, txn)
@@ -291,14 +324,14 @@ func handleOBS(conn net.Conn, app *appClient) {
 		}
 	}
 	if up != nil {
-		up.close()
+		up.Close()
 	}
 }
 
 // appFromConnect pulls the `app` string out of a connect command's props object
 // (vals[2]). The app carries the auth query string, e.g.
 // "live?authmod=adobe&user=robert&challenge=...&response=...&opaque=...".
-func appFromConnect(vals []interface{}) string {
+func AppFromConnect(vals []interface{}) string {
 	if len(vals) < 3 {
 		return ""
 	}
@@ -313,7 +346,7 @@ func appFromConnect(vals []interface{}) string {
 // parseApp splits an app field's query string WITHOUT url-decoding — base64
 // values contain '+','/','=' which url-decoding would corrupt. Manual split keeps
 // them verbatim (so the response compares byte-exact at the app).
-func parseApp(app string) map[string]string {
+func ParseApp(app string) map[string]string {
 	out := map[string]string{}
 	q := app
 	if i := strings.Index(app, "?"); i >= 0 {
@@ -331,7 +364,7 @@ func parseApp(app string) map[string]string {
 // remote address ("192.168.50.27:54321" → "ip-192.168.50.27"). Used for credless
 // publishers (no account identity) so concurrent publishers stay unique per
 // machine and dashboard session labels are still meaningful.
-func ipStreamName(remote string) string {
+func IpStreamName(remote string) string {
 	host, _, err := net.SplitHostPort(remote)
 	if err != nil {
 		host = remote
@@ -354,7 +387,7 @@ func ipStreamName(remote string) string {
 // snapshots) go over HTTP-FLV, where a raw '@' in the URL path works — only
 // ffmpeg's RTMP URL parser (user:pass@host) chokes on it, and nothing pulls
 // RTMP anymore. Characters outside [A-Za-z0-9._@-] still become '_'.
-func safeStreamName(name string) string {
+func SafeStreamName(name string) string {
 	var b strings.Builder
 	for _, r := range name {
 		switch {
@@ -369,9 +402,9 @@ func safeStreamName(name string) string {
 
 // sendConnectResult writes the standard connect-success preamble: window ack
 // size, peer bandwidth, StreamBegin, then _result Connect.Success.
-func sendConnectResult(cw *chunkWriter, txn float64) {
-	_ = cw.WriteMessage(&Message{Type: 5, CSID: 2, Payload: putBe4(2500000)})               // window ack size
-	_ = cw.WriteMessage(&Message{Type: 6, CSID: 2, Payload: append(putBe4(2500000), 0x02)}) // peer bandwidth (dynamic)
+func SendConnectResult(cw *chunkWriter, txn float64) {
+	_ = cw.WriteMessage(&Message{Type: 5, CSID: 2, Payload: PutBE4(2500000)})               // window ack size
+	_ = cw.WriteMessage(&Message{Type: 6, CSID: 2, Payload: append(PutBE4(2500000), 0x02)}) // peer bandwidth (dynamic)
 	_ = cw.WriteMessage(&Message{Type: 4, CSID: 2, Payload: []byte{0, 0, 0, 0, 0, 0}})      // StreamBegin msid 0
-	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: cmdConnectOK(txn)})
+	_ = cw.WriteMessage(&Message{Type: 20, CSID: 3, Payload: CmdConnectOK(txn)})
 }
