@@ -1,21 +1,28 @@
 # ─────────────────────────────────────────────────────────────────
-# Constrainable Ingest — Deployment Orchestrator
+# Constrainable Ingest — Full Deployment (3 containers, 1 network)
 #
-# This repo contains ONLY deployment configuration (compose + docs).
-# Code lives in:
-#   constrainable-app         → Nuxt frontend + backend (ghcr.io/OWNER/constrainable-app)
-#   constrainable-media-node → Go RTMP + SRS (ghcr.io/OWNER/constrainable-media-node)
+# constrainable-app = ghcr.io/hnrobert/constrainable-app        (Nuxt API + SSR)
+# media-node        = ghcr.io/hnrobert/constrainable-media-node (Go RTMP front)
+# srs               = ossrs/srs:6                               (streaming engine)
 #
-# Usage:
-#   docker compose -f docker-compose.yml up -d
+# All RTMP ingest goes through the media-node on :1935. Two auth levels:
+# - OBS "Use authentication" ON → account auth (authmod challenge)
+# - OBS "Use authentication" OFF → credless, event-key checked at publish
 #
-# Replace OWNER with the GitHub user/org that owns the GHCR packages.
+# The media-node owns SRS configuration: it renders the embedded template onto
+# a shared volume; the SRS container waits for the file, then starts.
+#
+# Inter-container links use Docker's internal DNS (service names on the
+# `ingest` network). Host-published ports are only for OUTSIDE consumers:
+#   31954 → the web app (browsers)     1935 → RTMP ingest (OBS)
+# SRS's ports (38080 FLV / 1985 API) stay INSIDE the network — the app backend
+# pulls playback over the Docker network, and viewers play through the app's
+# same-origin proxy, so neither port is published.
 # ─────────────────────────────────────────────────────────────────
 
 services:
-  # ── Backend: Nuxt API + SSR frontend + Socket.IO ──
-  server:
-    image: ghcr.io/OWNER/constrainable-app:latest
+  constrainable-app:
+    image: ghcr.io/hnrobert/constrainable-app:latest
     container_name: ingest-server
     environment:
       TZ: ${TZ:-Asia/Shanghai}
@@ -24,12 +31,16 @@ services:
       NODE_ENV: production
       DB_PATH: /app/data/app.db
       RECORD_DIR: /app/records
-      PUBLIC_HOST: ${PUBLIC_HOST:-127.0.0.1}
       SESSION_SECRET: ${SESSION_SECRET:-changeme-change-me}
       AUTHMOD_VERIFIER_SECRET: ${AUTHMOD_VERIFIER_SECRET:-change-me-to-a-long-random-string}
       # MEDIA_NODE_AUTH_TOKEN: ${MEDIA_NODE_AUTH_TOKEN:-}  # empty = no auth
+      # Split deployment (frontend on another origin, e.g. a CDN) — allowed
+      # frontend origins for credentialed cross-origin API calls. See docs/CDN.md.
+      # CORS_ORIGINS: ${CORS_ORIGINS:-}
     volumes:
       - ./data:/app/data
+      # Shared with the srs container's /records: the app serves recordings
+      # written by SRS DVR directly from this volume.
       - ./records:/app/records
     ports:
       - "31954:31954"
@@ -37,32 +48,62 @@ services:
       - ingest
     restart: unless-stopped
 
-  # ── Go media-node: RTMP front-door + colocated SRS (~10MB) ──
+  # Go media-node: RTMP ingest (account auth + relay), session tracking,
+  # recording reports. Renders the SRS config for the sidecar below.
   media-node:
-    image: ghcr.io/OWNER/constrainable-media-node:latest
+    image: ghcr.io/hnrobert/constrainable-media-node:latest
     container_name: ingest-media-node
     environment:
       TZ: ${TZ:-Asia/Shanghai}
-      NODE_ORIGIN: http://server:31954
-      SELF_ORIGIN: ${PUBLIC_HOST:-127.0.0.1}
+      # control plane — Docker internal DNS
+      NODE_ORIGIN: http://constrainable-app:31954
+      # this node's identifier (defaults fine for single-node deployments)
+      SELF_ORIGIN: ${SELF_ORIGIN:-media-node}
       MEDIA_NODE_AUTH_TOKEN: ${MEDIA_NODE_AUTH_TOKEN:-}
       RTMP_PORT: "1935"
-      SRS_ADDR: localhost:1935
-      SRS_API_BASE: http://localhost:1985/api/v1
-      SRS_BIN: /usr/local/srs/objs/srs
+      # SRS sidecar — Docker internal DNS; config rendered to the shared volume
+      SRS_BIN: "" # empty = SRS runs as the sidecar container below
+      SRS_ADDR: srs:1935
+      SRS_API_BASE: http://srs:1985/api/v1
+      # Advertised to the app backend for playback pulls — Docker internal DNS
+      SRS_FLV_BASE: http://srs:38080
+      # WebRTC ICE candidate — only matters if you publish srs's udp/8000 for
+      # WebRTC (WHEP) playback; FLV playback (default) doesn't need it.
       SRS_RTC_CANDIDATE: ${PUBLIC_HOST:-127.0.0.1}
       RECORD_DIR: /records
       ALLOW_DIRECT_SRS: "false"
     volumes:
-      - ./records:/records
+      - ./records:/records # scans DVR segments to report recordings
+      - srs-conf:/srs-config # renders the SRS config here
     ports:
       - "1935:1935"
-      - "8080:8080"
     networks:
       - ingest
     depends_on:
-      - server
+      - constrainable-app
     restart: unless-stopped
+
+  # SRS streaming engine (sidecar): waits for the config the media-node
+  # renders onto the shared volume, then starts. DVR segments land in
+  # ./records (same host dir the app serves recordings from).
+  srs:
+    image: ossrs/srs:6
+    container_name: ingest-srs
+    command:
+      - sh
+      - -c
+      - "until [ -f /srs-config/srs.conf ]; do sleep 0.2; done; exec /usr/local/srs/objs/srs -c /srs-config/srs.conf"
+    volumes:
+      - ./records:/records
+      - srs-conf:/srs-config
+    networks:
+      - ingest
+    depends_on:
+      - media-node
+    restart: unless-stopped
+
+volumes:
+  srs-conf:
 
 networks:
   ingest:

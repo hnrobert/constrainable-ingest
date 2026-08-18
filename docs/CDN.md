@@ -1,22 +1,16 @@
 # CDN Deployment Guide — Static Frontend + Remote API
 
-How to deploy the frontend as pre-generated static pages on a CDN (Alibaba Cloud OSS + CDN, Tencent Cloud COS + CDN, or Cloudflare Pages) while the backend API runs on your own server. This gives sub-50ms page loads nationwide for 100+ concurrent users.
+How to deploy the frontend as pre-generated static pages on a CDN (Alibaba Cloud OSS + CDN, Tencent Cloud EdgeOne, or Cloudflare Pages) while the backend API runs on your own server. This gives sub-50ms page loads nationwide for 100+ concurrent users.
 
 ## Architecture
 
-```
-┌────────────────────────────────┐
-│  CDN (frontend static pages)   │  ← nuxt generate output
-│  e.g. cdn.example.com          │
-│  Serves: HTML / JS / CSS       │
-└──────────┬─────────────────────┘
-           │ /api/*  /socket/*
-           ▼
-┌────────────────────────────────┐
-│  Your server (backend API)     │  ← Nuxt server in Docker
-│  e.g. api.example.com          │
-│  Serves: API + Socket.IO + DB  │
-└────────────────────────────────┘
+```mermaid
+graph TB
+    cdn["CDN<br/>(frontend static pages)<br/>cdn.example.com<br/>HTML / JS / CSS"]
+    server["Your server<br/>(backend API)<br/>api.example.com<br/>API + Socket.IO + DB"]
+    user["User (browser)"]
+    user -->|"loads pages"| cdn
+    cdn -->|"/api/* /socket/*"| server
 ```
 
 ## Step 1 — Generate static pages
@@ -36,12 +30,12 @@ Output: `.output/public/` (static HTML/JS/CSS/favicon). This directory is what y
 1. Create an OSS bucket in the region closest to your users (e.g. `cn-beijing`)
 2. Upload the generate output:
 
-```bash
-# Using ossutil
-ossutil cp -r .output/public/ oss://your-bucket/ --update
-
-# Or using the Alibaba Cloud console (drag and drop .output/public/* )
-```
+   ```bash
+   # Using ossutil
+   ossutil cp -r .output/public/ oss://your-bucket/ --update
+   
+   # Or using the Alibaba Cloud console (drag and drop .output/public/* )
+   ```
 
 3. Enable static website hosting on the bucket:
    - Default homepage: `index.html`
@@ -55,12 +49,34 @@ ossutil cp -r .output/public/ oss://your-bucket/ --update
      - `/index.html` → 60 seconds (must revalidate)
      - `/api/**` → no cache (if routing through CDN, see Step 3)
 
-### Tencent Cloud (COS + CDN)
+### Tencent Cloud EdgeOne
 
-1. Create a COS bucket
-2. Upload: `coscmd upload -r .output/public/ /`
-3. Enable static website: index document `index.html`, error document `index.html`
-4. Add CDN domain → origin: COS bucket → same cache rules as above
+1. Go to [EdgeOne Console](https://console.cloud.tencent.com/edgeone) → create a site (or add an accelerated domain)
+2. Upload static files to EdgeOne's file storage or connect to an origin server:
+   - **Option A**: Upload `.output/public/` to COS, set COS as EdgeOne origin
+   - **Option B**: Set your backend server as origin, EdgeOne caches static paths only
+3. Configure cache rules:
+   - `/_nuxt/**` → cache 30 days (hashed filenames, immutable)
+   - `/index.html` → cache 60s, follow origin `Cache-Control`
+   - `/api/**` → no cache, proxy to backend
+   - `/socket/*` → no cache, enable WebSocket
+4. Add an edge function (optional) for SPA fallback:
+
+   ```js
+   // EdgeOne edge function: SPA fallback
+   async function handle(request) {
+     const url = new URL(request.url)
+     const resp = await fetch(request)
+     if (resp.status === 404 && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/_nuxt/')) {
+       return fetch(new URL('/index.html', url.origin))
+     }
+     return resp
+   }
+   ```
+
+5. Configure origin rules for API routing:
+   - `/api/*` → origin: `http://your-server-ip:31954`, no cache
+   - `/socket/*` → origin: `http://your-server-ip:31954`, no cache, WebSocket on
 
 ### Cloudflare Pages
 
@@ -79,53 +95,51 @@ The generated pages make API calls to relative paths (`/api/...`). You have two 
 
 Configure your CDN to NOT cache `/api/*` and `/socket/*` and instead forward them to your backend server:
 
-**Alibaba Cloud CDN → Origin Rules:**
+**EdgeOne / CDN → Origin Rules:**
+
 - Rule 1: `Path = /api/*` → origin: `http://your-server-ip:31954`, no cache
 - Rule 2: `Path = /socket/*` → origin: `http://your-server-ip:31954`, no cache, enable WebSocket
 - Rule 3: everything else → origin: OSS bucket, cache per Step 2
 
 **Cloudflare → Page Rules / Workers:**
+
 - `/api/*` → Resolve Override: `api.example.com`
 - `/socket/*` → Resolve Override + WebSocket: on
 
 With this approach, the frontend and API are same-origin from the user's perspective — no CORS, no cookie changes needed.
 
-### Option B: Separate API domain + CORS
+### Option B: Separate API origin (API_ORIGIN + CORS_ORIGINS)
 
-If your CDN doesn't support origin rules:
+If your CDN can't proxy `/api/*` and `/socket/*` (or you simply prefer direct browser → API traffic), the app has first-class support built in: one env var on each side, no code changes.
 
-1. Set the API base URL at generate time:
+**Frontend — `API_ORIGIN`** (where browser API + Socket.IO traffic goes; baked at generate time):
 
 ```bash
-# nuxt.config.ts → runtimeConfig
-NUXT_PUBLIC_API_BASE=https://api.example.com bun run generate
+API_ORIGIN=https://api.example.com bun run generate
 ```
 
-2. Enable CORS on the backend:
+Unset → same-origin (the default deployment, zero behavior change). When set, a client plugin rewrites every `/api/*` fetch to the API origin with credentials (`app/plugins/api-origin.client.ts`), and the Socket.IO client connects there too (`app/composables/useSocket.ts`).
 
-```ts
-// server/middleware/02-cors.ts (new file)
-export default defineEventHandler((event) => {
-  if (getRequestURL(event).pathname.startsWith('/api/')) {
-    setHeader(event, 'access-control-allow-origin', 'https://cdn.example.com')
-    setHeader(event, 'access-control-allow-credentials', 'true')
-    setHeader(event, 'access-control-allow-headers', 'content-type')
-    setHeader(event, 'access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS')
-    if (getMethod(event) === 'OPTIONS') { setResponseStatus(event, 204) }
-  }
-})
+**Backend — `CORS_ORIGINS`** (which frontend origins may send credentialed cross-origin requests):
+
+```bash
+CORS_ORIGINS=https://cdn.example.com docker compose up -d
 ```
 
-3. Socket.IO client connects to the API domain:
+Setting it enables three things: the CORS middleware (echoes the allowed origin with credentials — never `*`), Socket.IO handshake CORS restricted to the same list, and the session cookie switched to `SameSite=None; Secure`.
 
-```ts
-// app/composables/useSocket.ts — change the io() call
-io('https://api.example.com', { path: '/socket', ... })
+**HTTPS on the API origin is mandatory in this mode** — browsers reject `SameSite=None` without `Secure`, so the login cookie would not persist. Any CDN/LB in front of the API origin must also pass WebSocket upgrades through for `/socket/*`.
+
+```mermaid
+graph TB
+    cdn["CDN<br/>(frontend static pages)<br/>cdn.example.com"]
+    server["Your server<br/>(backend API)<br/>api.example.com"]
+    user["User (browser)"]
+    user -->|"loads pages"| cdn
+    user -->|"API + Socket.IO direct<br/>(API_ORIGIN + CORS)"| server
 ```
 
-4. Cookies need `SameSite=None; Secure` in `server/utils/session.ts` (requires HTTPS on both domains).
-
-**Option A is strongly recommended** — it avoids all CORS/cookie complexity.
+Option A vs B: A keeps everything same-origin (no CORS/cookie complexity, but the CDN must proxy API paths); B needs the two env vars + HTTPS but no CDN routing rules at all.
 
 ## Step 4 — Configure your backend
 
@@ -162,9 +176,9 @@ aliyun cdn RefreshObjectCaches --ObjectPath https://cdn.example.com/index.html -
 ## Troubleshooting
 
 | Issue | Cause | Fix |
-|---|---|---|
+| --- | --- | --- |
 | API 404 from CDN | CDN not routing /api/* to backend | Check origin rules (Step 3A) |
-| Login doesn't persist | Cookie blocked cross-domain | Use Option A (same-origin) or set `SameSite=None; Secure` |
+| Login doesn't persist | Cookie blocked cross-domain | Use Option A (same-origin), or Option B with HTTPS on the API origin (`SameSite=None; Secure` is automatic when `CORS_ORIGINS` is set) |
 | Socket.IO disconnects | CDN blocking WebSocket | Enable WebSocket pass-through on /socket/* rule |
-| Page loads but data empty | API base URL wrong | Check `NUXT_PUBLIC_API_BASE` or CDN origin rules |
+| Page loads but data empty | API base URL wrong | Check `API_ORIGIN` (Option B) or CDN origin rules (Option A) |
 | Old version after deploy | CDN cache not purged | Purge index.html (hashed assets auto-update) |
