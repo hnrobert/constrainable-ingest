@@ -1,17 +1,21 @@
 # ─────────────────────────────────────────────────────────────────
-# Constrainable Ingest — GHCR deployment (no build, pull & run)
+# Constrainable Ingest — Deployment Orchestrator
+#
+# This repo contains ONLY deployment configuration (compose + docs).
+# Code lives in:
+#   constrainable-app         → Nuxt frontend + backend (ghcr.io/OWNER/constrainable-app)
+#   constrainable-media-node → Go RTMP + SRS (ghcr.io/OWNER/constrainable-media-node)
 #
 # Usage:
-#   curl -O https://raw.githubusercontent.com/OWNER/constrainable-ingest/main/docker/docker-compose.ghcr.yml
-#   docker compose -f docker-compose.ghcr.yml up -d
+#   docker compose -f docker-compose.yml up -d
 #
-# Replace OWNER with the GitHub org/user that owns the GHCR packages.
+# Replace OWNER with the GitHub user/org that owns the GHCR packages.
 # ─────────────────────────────────────────────────────────────────
 
 services:
   # ── Backend: Nuxt API + SSR frontend + Socket.IO ──
   server:
-    image: ghcr.io/OWNER/constrainable-ingest:latest
+    image: ghcr.io/OWNER/constrainable-app:latest
     container_name: ingest-server
     environment:
       TZ: ${TZ:-Asia/Shanghai}
@@ -33,9 +37,7 @@ services:
       - ingest
     restart: unless-stopped
 
-  # ── Go media-node: RTMP front-door + SRS supervisor (~10MB) ──
-  # Self-contained: SRS config template is embedded, rendered at startup,
-  # SRS runs as a child process. One container = one media node.
+  # ── Go media-node: RTMP front-door + colocated SRS (~10MB) ──
   media-node:
     image: ghcr.io/OWNER/constrainable-media-node:latest
     container_name: ingest-media-node
