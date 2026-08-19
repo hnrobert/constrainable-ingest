@@ -142,6 +142,7 @@ Each media-node:
 git clone https://github.com/hnrobert/constrainable-media-node && cd constrainable-media-node
 API_ORIGIN=http://central-server:31954 \
 SELF_ORIGIN=shanghai-node \
+PUBLIC_ORIGIN=http://shanghai-node:38080 \
 SRS_FLV_BASE=http://shanghai-node:38080 \
 docker compose up -d
 ```
@@ -167,7 +168,7 @@ docker compose up -d
 | Issue | Check |
 | ------- | ------- |
 | Page loads but API 404 | request not reaching the app container; check `docker compose ps` and port 31954 |
-| OBS can't connect | Port 1935 blocked by firewall; check `docker logs ingest-media-node` |
+| OBS can't connect | Port 1935 blocked by firewall; check `docker logs constrainable-media-node` |
 | No recordings | Check `./records/` is writable; check SRS log in media-node container |
 | Media-node not registering | Check `API_ORIGIN` is reachable from the media-node container |
 | Wrong stream metrics | SRS API might be slow to start; wait 15s after first publish |

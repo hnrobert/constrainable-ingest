@@ -1,9 +1,10 @@
 # ─────────────────────────────────────────────────────────────────
 # Constrainable Ingest — Full Deployment (3 containers, 1 network)
 #
-# constrainable-app = ghcr.io/hnrobert/constrainable-app        (Nuxt API + SSR)
-# media-node        = ghcr.io/hnrobert/constrainable-media-node (Go RTMP front)
-# srs               = ossrs/srs:6                               (streaming engine)
+# app        → ghcr.io/hnrobert/constrainable-app        (Nuxt API + SSR)
+# media-node → ghcr.io/hnrobert/constrainable-media-node (Go RTMP front)
+# srs        → ossrs/srs:6                                (streaming engine)
+# Service names are the DNS names; container names mirror the images.
 #
 # All RTMP ingest goes through the media-node on :1935. Two auth levels:
 # - OBS "Use authentication" ON → account auth (authmod challenge)
@@ -21,9 +22,9 @@
 # ─────────────────────────────────────────────────────────────────
 
 services:
-  constrainable-app:
+  app:
     image: ghcr.io/hnrobert/constrainable-app:latest
-    container_name: ingest-server
+    container_name: constrainable-app
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       HOST: 0.0.0.0
@@ -45,20 +46,24 @@ services:
     ports:
       - "31954:31954"
     networks:
-      - ingest
+      - constrainable-ingest
     restart: unless-stopped
 
   # Go media-node: RTMP ingest (account auth + relay), session tracking,
   # recording reports. Renders the SRS config for the sidecar below.
   media-node:
     image: ghcr.io/hnrobert/constrainable-media-node:latest
-    container_name: ingest-media-node
+    container_name: constrainable-media-node
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       # control plane — Docker internal DNS
-      API_ORIGIN: http://constrainable-app:31954
+      API_ORIGIN: http://app:31954
       # this node's identifier (defaults fine for single-node deployments)
       SELF_ORIGIN: ${SELF_ORIGIN:-media-node}
+      # Browser-reachable base for this node — multi-node deployments only
+      # (drives latency probing + OBS host for assigned users). Leave unset on
+      # a single-server deployment.
+      # PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-}
       MEDIA_NODE_AUTH_TOKEN: ${MEDIA_NODE_AUTH_TOKEN:-}
       RTMP_PORT: "1935"
       # SRS sidecar — Docker internal DNS; config rendered to the shared volume
@@ -78,9 +83,9 @@ services:
     ports:
       - "1935:1935"
     networks:
-      - ingest
+      - constrainable-ingest
     depends_on:
-      - constrainable-app
+      - app
     restart: unless-stopped
 
   # SRS streaming engine (sidecar): waits for the config the media-node
@@ -88,7 +93,7 @@ services:
   # ./records (same host dir the app serves recordings from).
   srs:
     image: ossrs/srs:6
-    container_name: ingest-srs
+    container_name: constrainable-srs
     command:
       - sh
       - -c
@@ -97,7 +102,7 @@ services:
       - ./records:/records
       - srs-conf:/srs-config
     networks:
-      - ingest
+      - constrainable-ingest
     depends_on:
       - media-node
     restart: unless-stopped
@@ -106,5 +111,5 @@ volumes:
   srs-conf:
 
 networks:
-  ingest:
+  constrainable-ingest:
     driver: bridge
