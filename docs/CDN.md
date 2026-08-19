@@ -21,7 +21,9 @@ bun run generate
 
 Output: `.output/public/` (static HTML/JS/CSS/favicon). This directory is what you upload to the CDN.
 
-> **Note:** Authenticated dashboard pages are client-rendered (SPA mode). The generate step pre-renders public pages (login, event guides, homepage) for instant loads. Dashboard pages load the shell then fetch data via API.
+> **Build runtime must be Bun, not Node.** The `generate` script (`bun …/nuxi.mjs generate`) already forces this — do NOT replace it with a plain `nuxt generate` call: the `nuxt` bin's shebang is `#!/usr/bin/env node`, and prerendering imports the server bundle, which needs the `bun:sqlite` builtin (Node fails with `Only URLs with a scheme in: file, data, and node are supported … Received protocol 'bun:'`). On CDN builders, set the build command to `bun install && bun run generate` and make sure Bun is available.
+>
+> **Note:** The static output is an SPA shell: the auth middleware redirects `/` to `/login`, so `index.html` (copied from nitro's `200.html` by the generate script) is a meta-refresh to `/login`, after which the client router + `API_ORIGIN` fetches take over. With `API_ORIGIN` set, payload extraction is disabled automatically so data pages fetch LIVE data instead of hydrating build-time output. CDN "default homepage" should be `index.html` with SPA fallback (serve it on unknown paths too).
 
 ## Step 2 — Upload to CDN storage
 
@@ -50,6 +52,13 @@ Output: `.output/public/` (static HTML/JS/CSS/favicon). This directory is what y
      - `/api/**` → no cache (if routing through CDN, see Step 3)
 
 ### Tencent Cloud EdgeOne
+
+> **Use a CUSTOM build, not the auto-detected Nuxt preset.** EdgeOne's Nuxt
+> detection builds SSR cloud functions (`.edgeone/cloud-functions/ssr-node`) —
+> those run under Node, and this app requires Bun (`bun:sqlite`), so the
+> function path crashes at runtime. In project settings set:
+> 框架/preset = None (custom) · build command = `bun install && bun run generate`
+> · output directory = `.output/public` (contains `index.html`).
 
 1. Go to [EdgeOne Console](https://console.cloud.tencent.com/edgeone) → create a site (or add an accelerated domain)
 2. Upload static files to EdgeOne's file storage or connect to an origin server:

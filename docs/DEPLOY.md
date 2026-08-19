@@ -140,7 +140,7 @@ Each media-node:
 ```bash
 # On a remote server (node + SRS sidecar via the media-node repo's compose)
 git clone https://github.com/hnrobert/constrainable-media-node && cd constrainable-media-node
-NODE_ORIGIN=http://central-server:31954 \
+API_ORIGIN=http://central-server:31954 \
 SELF_ORIGIN=shanghai-node \
 SRS_FLV_BASE=http://shanghai-node:38080 \
 docker compose up -d
@@ -169,5 +169,5 @@ docker compose up -d
 | Page loads but API 404 | request not reaching the app container; check `docker compose ps` and port 31954 |
 | OBS can't connect | Port 1935 blocked by firewall; check `docker logs ingest-media-node` |
 | No recordings | Check `./records/` is writable; check SRS log in media-node container |
-| Media-node not registering | Check `NODE_ORIGIN` is reachable from the media-node container |
+| Media-node not registering | Check `API_ORIGIN` is reachable from the media-node container |
 | Wrong stream metrics | SRS API might be slow to start; wait 15s after first publish |

@@ -56,7 +56,7 @@ services:
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       # control plane — Docker internal DNS
-      NODE_ORIGIN: http://constrainable-app:31954
+      API_ORIGIN: http://constrainable-app:31954
       # this node's identifier (defaults fine for single-node deployments)
       SELF_ORIGIN: ${SELF_ORIGIN:-media-node}
       MEDIA_NODE_AUTH_TOKEN: ${MEDIA_NODE_AUTH_TOKEN:-}
