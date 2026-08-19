@@ -95,7 +95,7 @@ from the origin users browse the app at, and playback is same-origin.
 | `MEDIA_NODE_AUTH_TOKEN` | _(empty)_ | Shared secret between backend and media-node. Empty = no auth. |
 | `PUBLIC_HOST` | _(auto)_ | WebRTC (WHEP) ICE candidate + explicit ingest-host override. |
 | `CORS_ORIGINS` | _(empty)_ | Split deployment: allowed frontend origins (see docs/CDN.md Option B). |
-| `SELF_ORIGIN` | `media-node` | Media-node's public identifier (multi-node deployments). |
+| `NODE_IDENTIFIER` | `media-node` | Media-node's public identifier (multi-node deployments). |
 | `TZ` | `Asia/Shanghai` | Timezone for recordings directory naming. |
 
 ## Data persistence
@@ -106,6 +106,32 @@ from the origin users browse the app at, and playback is same-origin.
 | `./records/` | `/records/` | DVR recording files (FLV) |
 
 Backup: copy the `data/` directory. Recordings can be backed up or offloaded separately.
+
+## Same host, separate compose projects
+
+The app and media-node may run as two independent compose projects on one
+machine (each repo's own docker-compose.yml). Service names do NOT resolve
+across compose projects by default — connect them with a shared external
+network (once):
+
+```bash
+docker network create ingest-shared
+```
+
+Uncomment the `ingest-shared` blocks in BOTH compose files (app + media-node),
+then point the node at the app by service name as usual:
+
+```yaml
+# media-node compose
+API_ORIGIN: http://app:31954
+```
+
+Everything stays on the container network — no published ports or host
+firewall involvement. Quick alternative without shared networking:
+`API_ORIGIN: http://host.docker.internal:31954` plus
+`extra_hosts: ["host.docker.internal:host-gateway"]` on Linux (routes through
+the host's published port). Set `MEDIA_NODE_AUTH_TOKEN` (same value on both
+sides) — traffic is no longer isolated to one compose network.
 
 ## Scaling to multiple servers
 
@@ -141,8 +167,8 @@ Each media-node:
 # On a remote server (node + SRS sidecar via the media-node repo's compose)
 git clone https://github.com/hnrobert/constrainable-media-node && cd constrainable-media-node
 API_ORIGIN=http://central-server:31954 \
-SELF_ORIGIN=shanghai-node \
-PUBLIC_ORIGIN=http://shanghai-node:38080 \
+NODE_IDENTIFIER=shanghai-node \
+PUBLIC_DOMAIN=shanghai-node \
 SRS_FLV_BASE=http://shanghai-node:38081 \
 docker compose up -d
 ```

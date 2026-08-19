@@ -58,12 +58,12 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       # control plane — Docker internal DNS
       API_ORIGIN: http://app:31954
-      # this node's identifier (defaults fine for single-node deployments)
-      SELF_ORIGIN: ${SELF_ORIGIN:-media-node}
-      # Browser-reachable base for this node — multi-node deployments only
-      # (drives latency probing + OBS host for assigned users). Leave unset on
-      # a single-server deployment.
-      # PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-}
+      # this node's stable identity (defaults fine for single-node deployments)
+      NODE_IDENTIFIER: ${NODE_IDENTIFIER:-media-node}
+      # Browser-reachable domain + play port — multi-node deployments only.
+      # Leave unset on a single-server deployment.
+      # PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-}
+      # PUBLIC_PLAY_PORT: ${PUBLIC_PLAY_PORT:-38080}
       MEDIA_NODE_AUTH_TOKEN: ${MEDIA_NODE_AUTH_TOKEN:-}
       RTMP_PORT: "1935"
       # SRS sidecar — Docker internal DNS; config rendered to the shared volume

@@ -67,7 +67,7 @@ Run additional media-nodes on other servers:
 # On a remote server (uses the media-node repo's compose: node + SRS sidecar)
 git clone https://github.com/hnrobert/constrainable-media-node && cd constrainable-media-node
 API_ORIGIN=http://central-server:31954 \
-SELF_ORIGIN=remote-node-1 \
+NODE_IDENTIFIER=remote-node-1 \
 SRS_FLV_BASE=http://remote-node-1:38081 \
 docker compose up -d
 ```
