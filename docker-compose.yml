@@ -16,7 +16,7 @@
 # Inter-container links use Docker's internal DNS (service names on the
 # `ingest` network). Host-published ports are only for OUTSIDE consumers:
 #   31954 → the web app (browsers)     1935 → RTMP ingest (OBS)
-# SRS's ports (38080 FLV / 1985 API) stay INSIDE the network — the app backend
+# SRS's ports (38081 FLV / 1985 API) stay INSIDE the network — the app backend
 # pulls playback over the Docker network, and viewers play through the app's
 # same-origin proxy, so neither port is published.
 # ─────────────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ services:
       SRS_ADDR: srs:1935
       SRS_API_BASE: http://srs:1985/api/v1
       # Advertised to the app backend for playback pulls — Docker internal DNS
-      SRS_FLV_BASE: http://srs:38080
+      SRS_FLV_BASE: http://srs:38081
       # WebRTC ICE candidate — only matters if you publish srs's udp/8000 for
       # WebRTC (WHEP) playback; FLV playback (default) doesn't need it.
       SRS_RTC_CANDIDATE: ${PUBLIC_HOST:-127.0.0.1}

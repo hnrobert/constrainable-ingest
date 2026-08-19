@@ -57,7 +57,7 @@ graph TB
 | 31954 | constrainable-app | Browser (web UI, API, Socket.IO) |
 | 1935 | media-node | OBS (RTMP push) |
 
-SRS's ports (38080 FLV / 1985 API) are internal to the Docker network: the app backend pulls playback from the media-node by its service name and viewers play through the app's same-origin proxy — nothing outside Docker reaches SRS directly.
+SRS's ports (38081 FLV / 1985 API) are internal to the Docker network: the app backend pulls playback from SRS by its service name and viewers play through the app's same-origin proxy — nothing outside Docker reaches SRS directly.
 
 ## Scaling
 
@@ -68,7 +68,7 @@ Run additional media-nodes on other servers:
 git clone https://github.com/hnrobert/constrainable-media-node && cd constrainable-media-node
 API_ORIGIN=http://central-server:31954 \
 SELF_ORIGIN=remote-node-1 \
-SRS_FLV_BASE=http://remote-node-1:38080 \
+SRS_FLV_BASE=http://remote-node-1:38081 \
 docker compose up -d
 ```
 

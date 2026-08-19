@@ -143,7 +143,7 @@ git clone https://github.com/hnrobert/constrainable-media-node && cd constrainab
 API_ORIGIN=http://central-server:31954 \
 SELF_ORIGIN=shanghai-node \
 PUBLIC_ORIGIN=http://shanghai-node:38080 \
-SRS_FLV_BASE=http://shanghai-node:38080 \
+SRS_FLV_BASE=http://shanghai-node:38081 \
 docker compose up -d
 ```
 
@@ -154,7 +154,7 @@ docker compose up -d
 | 31954 | constrainable-app | HTTP | Browser (web UI, API, Socket.IO) |
 | 1935 | media-node | RTMP | OBS (push streaming) |
 
-SRS's ports (38080 FLV, 1985 API) are NOT published on a compose host: the app backend reaches them over the Docker network by service name (`http://srs:38080`), and viewers play through the app's same-origin proxy. A standalone remote media-node (see Scaling above) publishes 38080 on its SRS sidecar because the central backend pulls playback over the network. The FLV port is configurable on the node (`SRS_HTTP_PORT`, default 38080 — deliberately uncommon to avoid clashes with other services).
+Port roles are distinct: **38080 = the node's play entry** (published on standalone nodes; browsers pull SIGNED FLV URLs there, each pull authorized by the backend over Socket.IO — viewer bandwidth goes browser→node directly) · **38081 = the SRS sidecar's http_server** (`SRS_HTTP_PORT`, internal-only on a compose host — the app reaches it by service name `http://srs:38081`) · 1985 = SRS API (internal). A remote node additionally publishes the sidecar's 38081 only if the backend must pull from it directly (WHEP signaling, snapshots of remote streams); direct SRS access bypasses the play auth gate, so prefer leaving it internal.
 
 ## Updating
 
