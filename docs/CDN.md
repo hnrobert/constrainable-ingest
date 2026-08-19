@@ -21,7 +21,9 @@ bun run generate
 
 Output: `.output/public/` (static HTML/JS/CSS/favicon). This directory is what you upload to the CDN.
 
-> **Build runtime must be Bun, not Node.** The `generate` script (`bun …/nuxi.mjs generate`) already forces this — do NOT replace it with a plain `nuxt generate` call: the `nuxt` bin's shebang is `#!/usr/bin/env node`, and prerendering imports the server bundle, which needs the `bun:sqlite` builtin (Node fails with `Only URLs with a scheme in: file, data, and node are supported … Received protocol 'bun:'`). On CDN builders, set the build command to `bun install && bun run generate` and make sure Bun is available.
+> **Build runtime must be Bun, not Node.** The `generate` script (`env -u NITRO_PRESET … bun …/nuxi.mjs generate`) already forces this — do NOT replace it with a plain `nuxt generate` call: the `nuxt` bin's shebang is `#!/usr/bin/env node`, and prerendering imports the server bundle, which needs the `bun:sqlite` builtin (Node fails with `Only URLs with a scheme in: file, data, and node are supported … Received protocol 'bun:'`). On CDN builders, set the build command to `bun install && bun run generate` and make sure Bun is available.
+>
+> **The script also neutralizes nitro env hijacking** (`env -u NITRO_PRESET -u NUXT_NITRO_PRESET -u NITRO_OUTPUT -u NUXT_NITRO_OUTPUT`): some platforms (EdgeOne Pages' builder) export these to reroute output into their own SSR-function layout (`.edgeone/`) — which deploys a Node cloud function and 500s with `Cannot find module '/var/user/chunks/_/nitro.mjs'`. With the guards, output ALWAYS lands in `.output/public` regardless of the build image's environment.
 >
 > **Note:** The static output is an SPA shell: the auth middleware redirects `/` to `/login`, so `index.html` (copied from nitro's `200.html` by the generate script) is a meta-refresh to `/login`, after which the client router + `API_ORIGIN` fetches take over. With `API_ORIGIN` set, payload extraction is disabled automatically so data pages fetch LIVE data instead of hydrating build-time output. CDN "default homepage" should be `index.html` with SPA fallback (serve it on unknown paths too).
 
