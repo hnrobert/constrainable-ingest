@@ -168,7 +168,7 @@ Each media-node:
 git clone https://github.com/hnrobert/constrainable-media-node && cd constrainable-media-node
 API_ORIGIN=http://central-server:31954 \
 NODE_IDENTIFIER=shanghai-node \
-PUBLIC_DOMAIN=shanghai-node \
+PUBLIC_NODE_ORIGIN=https://shanghai-node \
 SRS_FLV_BASE=http://shanghai-node:38081 \
 docker compose up -d
 ```

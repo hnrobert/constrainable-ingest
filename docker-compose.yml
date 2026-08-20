@@ -60,10 +60,12 @@ services:
       API_ORIGIN: http://app:31954
       # this node's stable identity (defaults fine for single-node deployments)
       NODE_IDENTIFIER: ${NODE_IDENTIFIER:-media-node}
-      # Browser-reachable domain + play port — multi-node deployments only.
-      # Leave unset on a single-server deployment.
-      # PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-}
-      # PUBLIC_PLAY_PORT: ${PUBLIC_PLAY_PORT:-38080}
+      # THE single public origin — multi-node deployments only. Playback is
+      # path-based on it (route /live/ on that domain to the node's play
+      # port). Leave unset on a single-server deployment.
+      # PUBLIC_NODE_ORIGIN: ${PUBLIC_NODE_ORIGIN:-}
+      # OBS ingest authority host[:port] when the tunnel remaps RTMP (else derived).
+      # PUBLIC_RTMP_AUTHORITY: ${PUBLIC_RTMP_AUTHORITY:-}
       MEDIA_NODE_AUTH_TOKEN: ${MEDIA_NODE_AUTH_TOKEN:-}
       RTMP_PORT: "1935"
       # SRS sidecar — Docker internal DNS; config rendered to the shared volume
