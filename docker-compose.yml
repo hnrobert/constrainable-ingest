@@ -26,7 +26,9 @@ services:
     image: ghcr.io/hnrobert/constrainable-app:latest
     container_name: constrainable-app
     environment:
-      TZ: ${TZ:-Asia/Shanghai}
+      # Host timezone (linux): the /etc/localtime mount below makes this
+      # container follow the HOST's tz — TZ stays unset. macOS (Docker
+      # Desktop): host /etc isn't shared; add `TZ: ${TZ:-Asia/Shanghai}` here.
       HOST: 0.0.0.0
       PORT: "31954"
       NODE_ENV: production
@@ -39,6 +41,8 @@ services:
       # frontend origins for credentialed cross-origin API calls. See docs/CDN.md.
       # CORS_ORIGINS: ${CORS_ORIGINS:-}
     volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
       - ./data:/app/data
       # Shared with the srs container's /records: the app serves recordings
       # written by SRS DVR directly from this volume.
@@ -55,7 +59,9 @@ services:
     image: ghcr.io/hnrobert/constrainable-media-node:latest
     container_name: constrainable-media-node
     environment:
-      TZ: ${TZ:-Asia/Shanghai}
+      # Host timezone (linux): the /etc/localtime mount below makes this
+      # container follow the HOST's tz — TZ stays unset. macOS (Docker
+      # Desktop): host /etc isn't shared; add `TZ: ${TZ:-Asia/Shanghai}` here.
       # control plane — Docker internal DNS
       API_ORIGIN: http://app:31954
       # this node's stable identity (defaults fine for single-node deployments)
@@ -81,6 +87,8 @@ services:
       ALLOW_DIRECT_SRS: "false"
     volumes:
       - ./records:/records # scans DVR segments to report recordings
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
       - srs-conf:/srs-config # renders the SRS config here
     ports:
       - "1935:1935"
@@ -92,7 +100,8 @@ services:
 
   # SRS streaming engine (sidecar): waits for the config the media-node
   # renders onto the shared volume, then starts. DVR segments land in
-  # ./records (same host dir the app serves recordings from).
+  # ./records (same host dir the app serves recordings from). DVR filenames +
+  # logs follow the HOST timezone via the localtime mounts below.
   srs:
     image: ossrs/srs:6
     container_name: constrainable-srs
