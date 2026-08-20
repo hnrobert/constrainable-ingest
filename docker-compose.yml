@@ -74,7 +74,6 @@ services:
       # derived). Also the default WebRTC ICE candidate host.
       # PUBLIC_RTMP_AUTHORITY: ${PUBLIC_RTMP_AUTHORITY:-}
       MEDIA_NODE_AUTH_TOKEN: ${MEDIA_NODE_AUTH_TOKEN:-}
-      RTMP_PORT: "1935"
       # WebRTC ICE candidate browsers connect to (UDP). Empty = derived from
       # the OBS authority host (PUBLIC_RTMP_AUTHORITY/NODE_IDENTIFIER).
       SRS_RTC_CANDIDATE: ${SRS_RTC_CANDIDATE:-}
