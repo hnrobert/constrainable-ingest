@@ -36,6 +36,9 @@ services:
       RECORD_DIR: /app/records
       SESSION_SECRET: ${SESSION_SECRET:-changeme-change-me}
       AUTHMOD_VERIFIER_SECRET: ${AUTHMOD_VERIFIER_SECRET:-change-me-to-a-long-random-string}
+      # WebRTC ICE servers served to admin viewers (STUN now; TURN later —
+      # JSON array or comma URL list). Empty = direct-only (SRS is ICE-lite).
+      ICE_SERVERS: ${ICE_SERVERS:-}
       # MEDIA_NODE_AUTH_TOKEN: ${MEDIA_NODE_AUTH_TOKEN:-}  # empty = no auth
       # Split deployment (frontend on another origin, e.g. a CDN) — allowed
       # frontend origins for credentialed cross-origin API calls. See docs/CDN.md.
@@ -66,23 +69,15 @@ services:
       API_ORIGIN: http://app:31954
       # this node's stable identity (defaults fine for single-node deployments)
       NODE_IDENTIFIER: ${NODE_IDENTIFIER:-media-node}
-      # THE single public origin — multi-node deployments only. Playback is
-      # path-based on it (route /live/ on that domain to the node's play
-      # port). Leave unset on a single-server deployment.
-      # PUBLIC_NODE_ORIGIN: ${PUBLIC_NODE_ORIGIN:-}
-      # OBS ingest authority host[:port] when the tunnel remaps RTMP (else derived).
+
+      # OBS ingest authority host[:port] when the tunnel remaps RTMP (else
+      # derived). Also the default WebRTC ICE candidate host.
       # PUBLIC_RTMP_AUTHORITY: ${PUBLIC_RTMP_AUTHORITY:-}
       MEDIA_NODE_AUTH_TOKEN: ${MEDIA_NODE_AUTH_TOKEN:-}
       RTMP_PORT: "1935"
-      # SRS sidecar — Docker internal DNS; config rendered to the shared volume
-      SRS_BIN: "" # empty = SRS runs as the sidecar container below
-      SRS_ADDR: srs:1935
-      SRS_API_BASE: http://srs:1985/api/v1
-      # Advertised to the app backend for playback pulls — Docker internal DNS
-      SRS_FLV_BASE: http://srs:38081
-      # WebRTC ICE candidate — only matters if you publish srs's udp/8000 for
-      # WebRTC (WHEP) playback; FLV playback (default) doesn't need it.
-      SRS_RTC_CANDIDATE: ${PUBLIC_HOST:-127.0.0.1}
+      # WebRTC ICE candidate browsers connect to (UDP). Empty = derived from
+      # the OBS authority host (PUBLIC_RTMP_AUTHORITY/NODE_IDENTIFIER).
+      SRS_RTC_CANDIDATE: ${SRS_RTC_CANDIDATE:-}
       RECORD_DIR: /records
       ALLOW_DIRECT_SRS: "false"
     volumes:
@@ -112,6 +107,13 @@ services:
     volumes:
       - ./records:/records
       - srs-conf:/srs-config
+    ports:
+      # WebRTC media: browsers hit this UDP port DIRECTLY (ICE). It cannot be
+      # path-routed through an HTTP reverse proxy — the candidate host must
+      # resolve straight to this machine and the firewall must allow UDP. The
+      # port must equal SRS's rtc listen (both use SRS_UDP_PORT, default
+      # 38000) because the SDP candidate carries the port number.
+      - "${SRS_UDP_PORT:-38000}:${SRS_UDP_PORT:-38000}/udp"
     networks:
       - constrainable-ingest
     depends_on:

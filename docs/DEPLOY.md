@@ -93,7 +93,10 @@ from the origin users browse the app at, and playback is same-origin.
 | ----- | --------- | ------------- |
 | `AUTHMOD_VERIFIER_SECRET` | auto | AES key for authmod verifier encryption. |
 | `MEDIA_NODE_AUTH_TOKEN` | _(empty)_ | Shared secret between backend and media-node. Empty = no auth. |
-| `PUBLIC_HOST` | _(auto)_ | WebRTC (WHEP) ICE candidate + explicit ingest-host override. |
+| `PUBLIC_HOST` | _(auto)_ | WebRTC ICE candidate override + explicit ingest-host override. |
+| `SRS_RTC_CANDIDATE` | _(derived)_ | WebRTC ICE candidate browsers connect to (UDP); derived from the OBS authority host (`PUBLIC_RTMP_AUTHORITY`/`NODE_IDENTIFIER`). |
+| `SRS_UDP_PORT` | `8000` | Host UDP port mapped to SRS :8000 (WebRTC media) — must be open in the firewall. |
+| `ICE_SERVERS` | _(empty)_ | STUN/TURN servers for admin WebRTC viewers — JSON array or comma list (`turn:user:pass@host:port` shorthand works). Empty = direct-only (SRS is ICE-lite). |
 | `CORS_ORIGINS` | _(empty)_ | Split deployment: allowed frontend origins (see docs/CDN.md Option B). |
 | `NODE_IDENTIFIER` | `media-node` | Media-node's public identifier (multi-node deployments). |
 | `TZ` | `Asia/Shanghai` | Timezone for recordings directory naming. |
@@ -168,8 +171,9 @@ Each media-node:
 git clone https://github.com/hnrobert/constrainable-media-node && cd constrainable-media-node
 API_ORIGIN=http://central-server:31954 \
 NODE_IDENTIFIER=shanghai-node \
-PUBLIC_NODE_ORIGIN=https://shanghai-node \
-SRS_FLV_BASE=http://shanghai-node:38081 \
+PUBLIC_RTMP_AUTHORITY=shanghai-node \
+SRS_RTC_CANDIDATE=shanghai-node \
+SRS_FLV_BASE=http://backend-reachable-srs-host:38081 \
 docker compose up -d
 ```
 
@@ -180,7 +184,7 @@ docker compose up -d
 | 31954 | constrainable-app | HTTP | Browser (web UI, API, Socket.IO) |
 | 1935 | media-node | RTMP | OBS (push streaming) |
 
-Port roles are distinct: **38080 = the node's play entry** (published on standalone nodes; browsers pull SIGNED FLV URLs there, each pull authorized by the backend over Socket.IO — viewer bandwidth goes browser→node directly) · **38081 = the SRS sidecar's http_server** (`SRS_HTTP_PORT`, internal-only on a compose host — the app reaches it by service name `http://srs:38081`) · 1985 = SRS API (internal). A remote node additionally publishes the sidecar's 38081 only if the backend must pull from it directly (WHEP signaling, snapshots of remote streams); direct SRS access bypasses the play auth gate, so prefer leaving it internal.
+**Playback is WebRTC-only** — browsers get media directly over UDP (`SRS_UDP_PORT`, default 38000, published on the srs service; must be open in the firewall, and the candidate host must resolve straight to the node — DNS-only, not a CDN edge). The SDP signaling rides the app's admin-gated same-origin proxy, so no media session can start unauthenticated. SRS's HTTP ports (38081 FLV / 1985 API) stay internal: only the app pulls FLV server-side for frame capture (the node derives and advertises `http://srs:<SRS_HTTP_PORT>` from SRS_ADDR — in one compose or a shared network that name resolves; standalone remote nodes override SRS_FLV_BASE to whatever the backend can reach).
 
 ## Updating
 
